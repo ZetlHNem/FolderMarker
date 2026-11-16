@@ -77,6 +77,15 @@ if ($result.Errors.Count -gt 0) {
 }
 
 if (Test-Path -LiteralPath $exe) {
+    # 让 build\FolderMarker.exe 可以就地运行 / selftest：纯色图标按 exe 同级的 icons\ 查找
+    $iconsSrc = Join-Path $root "icons"
+    $iconsDst = Join-Path $outDir "icons"
+    if (Test-Path -LiteralPath $iconsSrc) {
+        if (-not (Test-Path -LiteralPath $iconsDst)) {
+            New-Item -ItemType Directory -Path $iconsDst | Out-Null
+        }
+        Copy-Item -Path (Join-Path $iconsSrc "*.ico") -Destination $iconsDst -Force
+    }
     $f = Get-Item -LiteralPath $exe
     Write-Output ("OK " + $f.FullName + " " + [math]::Round($f.Length / 1KB, 1) + " KB")
 } else {

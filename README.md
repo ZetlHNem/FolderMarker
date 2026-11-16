@@ -405,14 +405,14 @@ FolderMarker/
 │  ├─ core/   FolderMarker.cs + 17 个 partial  ← 程序核心（入口/图标/巡检/规则…；partial 已去前缀，如 Cache.cs / Mark.cs）
 │  ├─ ui/     ManagerWindow + ColorPicker + WinUi ← WPF 管理台与界面
 │  ├─ shell/  ShellExtension.cs / shell_native.c / shell.manifest ← 右键菜单 COM 扩展
-│  └─ _backup/ 拆分前的 .bak 备份（不参与编译）
+│  └─ _backup/ 拆分前的 .bak 备份（本地保留，不入库、不参与编译）
 ├─ packaging/                          ← sparse 包内容（AppxManifest.xml + logo）
 ├─ icons/*.ico                         ← 7 色文件夹图标 + app.ico + menu.ico
 ├─ FolderMarker.iss                    ← Inno Setup 安装脚本
 ├─ build_exe.ps1                       ← 编译 EXE（含图标资源）
 ├─ build_shell.ps1                     ← ⚠ 旧脚本：编译的是无用的托管 DLL（9KB），勿用来覆盖正式产物；原生扩展由 build_msix.ps1 用 zig 编译
 ├─ build_msix.ps1                      ← 打包 + 签名 sparse 包（需要 makeappx / signtool）
-├─ build/audit.py / audit2.py          ← 边界体检脚本（可指到任意版本的 exe 跑）
+├─ build/audit.py / audit2.py          ← 本地体检脚本（build/ 不入库，可指到任意版本的 exe 跑）
 └─ tools/
    ├─ extract_native.py                ← 抓系统原生文件夹图标（多尺寸）
    ├─ tint_icons.py                    ← 上色并生成 .ico
@@ -455,13 +455,15 @@ python tools/preview.py        # 生成 build\preview_colors.png 看效果
 python tools/gen/gen_app_icon.py   # 重新生成应用图标 icons\app.ico
 python tools/gen/gen_menu_icon.py  # 重新生成右键菜单图标 icons\menu.ico
 python tools/gen/gen_wizard.py     # 重新生成安装向导品牌图 build\wizard_large.bmp / wizard_small.bmp
-.\build_exe.ps1                # 需要动代码时重新编译主程序（只需系统 .NET，无额外依赖）
+.\build_exe.ps1                # 重新编译主程序（只需系统 .NET；会自动把 icons\ 复制到 build\）
 .\build_msix.ps1               # 改了 shell_native.c 时：编译原生 COM 扩展 + 打包签名 MSIX
 ```
 
 ### clone 后如何准备构建工具链
 
 主程序（`build_exe.ps1`）用系统自带的 .NET 编译器，clone 下来直接能编。
+编译完可直接运行 `build\FolderMarker.exe selftest` 验证（脚本会自动把 `icons\` 复制到
+`build\`；标准结果为 **39 通过 / 0 失败**）。
 只有构建右键菜单扩展（`build_msix.ps1`）需要两个第三方工具，仓库里已带上原始包：
 
 ```powershell
