@@ -14,8 +14,8 @@ from gen_app_icon import read_ico, folder_sprite, GRADIENTS  # noqa: E402
 
 W, H = 164, 314
 SS = 4                      # 超采样倍数
-OUT_LARGE = os.path.join(ROOT, "build", "wizard_large.bmp")
-OUT_SMALL = os.path.join(ROOT, "build", "wizard_small.bmp")
+OUT_LARGE = os.path.join(ROOT, "packaging", "wizard_large.bmp")
+OUT_SMALL = os.path.join(ROOT, "packaging", "wizard_small.bmp")
 
 FONT_LIGHT = r"C:\Windows\Fonts\msyhl.ttc"
 FONT_REG = r"C:\Windows\Fonts\msyh.ttc"

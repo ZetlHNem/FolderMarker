@@ -406,9 +406,10 @@ FolderMarker/
 │  ├─ ui/     ManagerWindow + ColorPicker + WinUi ← WPF 管理台与界面
 │  ├─ shell/  ShellExtension.cs / shell_native.c / shell.manifest ← 右键菜单 COM 扩展
 │  └─ _backup/ 拆分前的 .bak 备份（本地保留，不入库、不参与编译）
-├─ packaging/                          ← sparse 包内容（AppxManifest.xml + logo）
+├─ packaging/                          ← sparse 包内容（AppxManifest.xml + logo + 向导 bmp）
 ├─ icons/*.ico                         ← 7 色文件夹图标 + app.ico + menu.ico
 ├─ FolderMarker.iss                    ← Inno Setup 安装脚本
+├─ build_all.ps1                       ← 一键：解压工具 → 编译 → 自检 → MSIX → 安装包
 ├─ build_exe.ps1                       ← 编译 EXE（含图标资源）
 ├─ build_shell.ps1                     ← ⚠ 旧脚本：编译的是无用的托管 DLL（9KB），勿用来覆盖正式产物；原生扩展由 build_msix.ps1 用 zig 编译
 ├─ build_msix.ps1                      ← 打包 + 签名 sparse 包（需要 makeappx / signtool）
@@ -454,24 +455,29 @@ python tools/tint_icons.py     # 重新生成 7 个 .ico
 python tools/preview.py        # 生成 build\preview_colors.png 看效果
 python tools/gen/gen_app_icon.py   # 重新生成应用图标 icons\app.ico
 python tools/gen/gen_menu_icon.py  # 重新生成右键菜单图标 icons\menu.ico
-python tools/gen/gen_wizard.py     # 重新生成安装向导品牌图 build\wizard_large.bmp / wizard_small.bmp
+python tools/gen/gen_wizard.py     # 重新生成安装向导品牌图 packaging\wizard_large.bmp / wizard_small.bmp
 .\build_exe.ps1                # 重新编译主程序（只需系统 .NET；会自动把 icons\ 复制到 build\）
 .\build_msix.ps1               # 改了 shell_native.c 时：编译原生 COM 扩展 + 打包签名 MSIX
 ```
 
-### clone 后如何准备构建工具链
-
-主程序（`build_exe.ps1`）用系统自带的 .NET 编译器，clone 下来直接能编。
-编译完可直接运行 `build\FolderMarker.exe selftest` 验证（脚本会自动把 `icons\` 复制到
-`build\`；标准结果为 **39 通过 / 0 失败**）。
-只有构建右键菜单扩展（`build_msix.ps1`）需要两个第三方工具，仓库里已带上原始包：
+### clone 后一键构建
 
 ```powershell
-# 1) zig 编译器：解压 zig010.whl，取其中的 ziglang\zig.exe 放到 tools\zig\zig.exe
-#    （脚本也支持直接用 tools\zigpkg\ziglang\zig.exe，或 pip install ziglang）
-# 2) Windows SDK 工具：解压 sdktools.zip，把 bin\10.0.22621.0\x64\ 放到
-#    tools\sdktools\bin\10.0.22621.0\x64\  (mt.exe / makeappx.exe / signtool.exe)
+.\build_all.ps1
 ```
+
+脚本会自动完成全部步骤，不需要手动解压任何工具：
+
+1. 从 `tools\zig010.whl` 解出 zig（含 `lib`），从 `tools\sdktools.zip` 解出
+   `mt.exe / makeappx.exe / signtool.exe`
+2. 编译 `build\FolderMarker.exe`，并把 `icons\` 复制到 `build\`
+3. 跑 `selftest`，标准结果 **39 通过 / 0 失败**
+4. 编译原生 COM DLL、嵌入清单、打包并签名 `dist\FolderMarkerShell.msix`
+5. 检测到 Inno Setup 7 时，自动打 `dist\文件夹标记-安装包-v2.3.7.exe`；
+   没装则跳过安装包，其余产物照常生成
+
+手动分步执行也可以：`.\build_exe.ps1` → `.\build_msix.ps1` → `ISCC.exe FolderMarker.iss`。
+主程序用系统自带的 .NET 编译器，无需 Visual Studio / .NET SDK。
 
 > zig 0.10 在某些环境会偶发堆损坏崩溃，`build_msix.ps1` 已有降级：编译失败时复用
 > 已有 DLL（`shell_native.c` 没改动时成品等价）。这两个包都在 GitHub 单文件 100MB

@@ -1,6 +1,9 @@
 ﻿# 编译原生 COM DLL → 嵌入包身份清单 → 打成 sparse MSIX → 自签名
 # 前置：tools\zig\zig.exe（编译器）、tools\sdktools\bin\10.0.22621.0\x64\mt.exe 与 makeappx/signtool
-$ErrorActionPreference = "Stop"
+# 这里必须用 Continue：zig / mt / signtool 会把警告写到 stderr，
+# Stop 模式下 PowerShell 5.1 会把这些警告当成 terminating error，脚本会中途退出。
+# 每一步都靠 $LASTEXITCODE 或产物是否存在来判成败，下面已逐一检查。
+$ErrorActionPreference = "Continue"
 
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $zig  = Join-Path $root "tools\zig\zig.exe"
