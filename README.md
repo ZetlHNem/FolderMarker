@@ -17,7 +17,7 @@
 
 </div>
 
-<img src="docs/images/banner.png" alt="文件夹标记界面展示" width="100%">
+<img src="docs/images/intro-banner.png" alt="文件夹标记界面展示" width="100%">
 
 ## 亮点
 
