@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 嵌进 DLL 的 win32 清单：publisher / packageName / applicationId 必须与 AppxManifest.xml 一致，
+     否则 Explorer 不会加载这个 COM 服务器（表现为菜单里根本不出现）。 -->
+<assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
+  <assemblyIdentity type="win32" name="FolderMarkerShell" version="1.0.0.1" processorArchitecture="amd64" />
+  <msix xmlns="urn:schemas-microsoft-com:msix.v1"
+        publisher="CN=FolderMarker"
+        packageName="FolderMarkerShell"
+        applicationId="App" />
+</assembly>
