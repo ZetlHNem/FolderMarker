@@ -4,7 +4,7 @@
 #define MyAppName "文件夹标记"
 #define MyAppVersion "2.3.7"
 #define MyAppPublisher "FolderMarker"
-#define ShellExtVer "13"
+#define ShellExtVer "14"
 
 ; 菜单形态开关：
 ;   0 = 经典菜单（注册表 cascade）。支持任意层嵌套，「标记符号」是真三级。
