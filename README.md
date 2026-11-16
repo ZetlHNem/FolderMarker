@@ -131,3 +131,7 @@ FolderMarker/
 
 - `icons/palette.ico`：基于 [Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons) 的 `color-24-regular`，MIT License，Copyright (c) Microsoft Corporation。
 - 其余 `icons/*.ico` 为本项目自绘。
+
+## 许可
+
+本项目采用 [MIT License](LICENSE)。`tools/zig010.whl`（Zig）和 `tools/sdktools.zip`（Microsoft Windows SDK）为各自的第三方工具，按其原许可分发，仅用于本地构建，不属于本项目源码。
