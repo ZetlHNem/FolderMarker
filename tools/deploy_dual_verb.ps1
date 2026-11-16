@@ -1,4 +1,4 @@
-# 实验部署：同包双 Verb，验证 Win11 新版菜单的「应用归属 flyout」三级结构。
+﻿# 实验部署：同包双 Verb，验证 Win11 新版菜单的「应用归属 flyout」三级结构。
 # 只动 sparse 包与 %LOCALAPPDATA% 里的 DLL，不动经典注册表菜单、不动正式安装包。
 # 回滚：运行 tools/restore_single_verb.ps1
 $ErrorActionPreference = "Stop"

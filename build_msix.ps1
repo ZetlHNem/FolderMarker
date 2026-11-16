@@ -1,4 +1,4 @@
-# 编译原生 COM DLL → 嵌入包身份清单 → 打成 sparse MSIX → 自签名
+﻿# 编译原生 COM DLL → 嵌入包身份清单 → 打成 sparse MSIX → 自签名
 # 前置：tools\zig\zig.exe（编译器）、tools\sdktools\bin\10.0.22621.0\x64\mt.exe 与 makeappx/signtool
 $ErrorActionPreference = "Stop"
 

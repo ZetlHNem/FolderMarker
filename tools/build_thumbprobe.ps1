@@ -1,4 +1,4 @@
-# 编译诊断工具 tools\ThumbProbe.exe（问 Shell 要文件夹的真实缩略图）
+﻿# 编译诊断工具 tools\ThumbProbe.exe（问 Shell 要文件夹的真实缩略图）
 $ErrorActionPreference = "Stop"
 
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path

@@ -1,4 +1,4 @@
-# 编译诊断探针 IconProbe.exe（控制台程序，仅用于排查图标刷新时机）
+﻿# 编译诊断探针 IconProbe.exe（控制台程序，仅用于排查图标刷新时机）
 $ErrorActionPreference = "Stop"
 
 $root   = Split-Path -Parent $MyInvocation.MyCommand.Path

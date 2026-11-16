@@ -1,4 +1,4 @@
-# 把 src\shell\ShellExtension.cs 编译成 AnyCPU 的 .NET Framework DLL（供 Explorer 通过 COM 加载）
+﻿# 把 src\shell\ShellExtension.cs 编译成 AnyCPU 的 .NET Framework DLL（供 Explorer 通过 COM 加载）
 # 用 CodeDom 而不是直接调 csc.exe：本机安全策略允许前者。
 # 【注意】这是早期实验版托管 DLL（约 9KB），不是正式产物！
 # 正式安装包里用的是 build_msix.ps1 由 shell_native.c 经 zig 编译的原生 DLL（约 191KB）。

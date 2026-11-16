@@ -1,4 +1,4 @@
-# 把 src\core\FolderMarker.cs + src\ui\ManagerWindow.cs 编译成 GUI 子系统 EXE
+﻿# 把 src\core\FolderMarker.cs + src\ui\ManagerWindow.cs 编译成 GUI 子系统 EXE
 # 用 CompileAssemblyFromFile 而不是 Add-Type：后者只能吃单个源码字符串，
 # 而 WPF 管理台单独放一个文件（有自己的 using），两个文件必须分开编译。
 $ErrorActionPreference = "Stop"
