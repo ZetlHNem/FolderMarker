@@ -36,46 +36,6 @@
 
 右键 →「文件夹标记 → 管理…」打开管理台：标记清单（搜索/筛选/批量改色/清色/图标预览/拖入即标）、守护进程、共享盘同步、日志、设置、关于。
 
-## 界面预览
-
-### 右键菜单
-
-在资源管理器里右键文件夹，第一层菜单就能看到「文件夹标记」，展开挑颜色：
-
-![右键菜单 7 色](docs/images/context-menu.jpg)
-
-7 种颜色的实际文件夹效果（16/32/48 各一套，深浅背景都有）：
-
-![颜色预览](docs/images/color-preview.png)
-
-自定义颜色用系统取色器，和预设色走同一套渲染：
-
-![取色器](docs/images/color-picker.jpg)
-
-### 管理台
-
-Win11 设置页风格，暗色主题：
-
-| 标记清单 | 守护进程 |
-|---|---|
-| ![标记清单](docs/images/manager-list.png) | ![守护进程](docs/images/manager-watch.png) |
-| **共享盘同步** | **设置** |
-| ![共享盘同步](docs/images/manager-roots.png) | ![设置](docs/images/manager-settings.png) |
-
-关于页显示版本、目录、缓存统计：
-
-![关于](docs/images/manager-about.png)
-
-### 应用图标
-
-应用图标 = 深墨色圆角底板 + 彩虹渐变文件夹，尺寸从 16 到 256 全覆盖：
-
-![应用图标展示](docs/images/icon-showcase.png)
-
-### 安装
-
-![安装向导](docs/images/installer.png)
-
 ## 命令行
 
 程序在 `%LOCALAPPDATA%\FolderMarker\FolderMarker.exe`，全部支持命令调用：
