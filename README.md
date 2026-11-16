@@ -1,17 +1,23 @@
 <div align="center">
 
-<img src="docs/images/banner.png" alt="文件夹标记 FolderMarker" width="100%">
+<img src="docs/images/app-icon.png" alt="FolderMarker" width="96">
+
+# 文件夹标记 · FolderMarker
 
 ![version](https://img.shields.io/badge/version-2.3.7-blue)
 ![platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D6)
 ![.NET](https://img.shields.io/badge/.NET-Framework%204.6.2%2B-512BD4)
 ![build](https://img.shields.io/badge/build-one--click-brightgreen)
 
-**给 Windows 资源管理器加一个「文件夹标记」右键菜单，用 7 种颜色给文件夹上色。**
+**让文件管理更直观，更高效。** 给 Windows 文件夹加一个「文件夹标记」右键菜单，用 7 种颜色快速分类与识别，打造更清晰有序的工作空间。
 
-图标取自系统原生文件夹图标，只换色相 —— 形状、渐变、阴影与系统完全一致，16×16 下也能一眼认出颜色。
+| 多种颜色 | 快速操作 | 右键菜单 | 轻量简洁 |
+|:---:|:---:|:---:|:---:|
+| 一键标记 | 高效管理 | 随时使用 | 专注实用 |
 
 </div>
+
+<img src="docs/images/banner.png" alt="文件夹标记界面展示" width="100%">
 
 ## 亮点
 
