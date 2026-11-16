@@ -10,9 +10,14 @@
     xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
     IgnorableNamespaces="uap uap10 desktop4 desktop5 com rescap">
 
+  <!-- 1.0.0.24：从单 Verb 扩成 3 Verb（颜色 / 清除标记 / 管理）。
+       Win11 新版菜单在「一个包只挂一个 Verb」时会把它直接平铺到右键顶层，
+       表现为没有「文件夹标记」父级、只剩「颜色」；挂 3 个 Verb 后 Explorer
+       会自动收进一个以 DisplayName 命名的应用 flyout，恢复三级结构。
+       版本必须递增，RegisterMenu.ps1 靠版本号判断要不要重新注册。 -->
   <Identity Name="FolderMarkerShell"
             Publisher="CN=FolderMarker"
-            Version="1.0.0.12"
+            Version="1.0.0.24"
             ProcessorArchitecture="x64" />
 
   <Properties>
@@ -45,7 +50,16 @@
         <com:Extension Category="windows.comServer">
           <com:ComServer>
             <com:SurrogateServer DisplayName="FolderMarkerShell">
+              <!-- 3 个命令对应 shell_native.c 的 g_clsids[0..2]：
+                   颜色分组(B41) / 清除标记(B43) / 管理(B44)。
+                   之前只声明了 B41 一个类，另外两个 Verb 没有可用的 COM 类。 -->
               <com:Class Id="6F1D3A24-8C7E-4B1A-9E25-3D5C8A0F7B41"
+                        Path="FolderMarker.Shell.dll"
+                        ThreadingModel="STA" />
+              <com:Class Id="6F1D3A26-8C7E-4B1A-9E25-3D5C8A0F7B43"
+                        Path="FolderMarker.Shell.dll"
+                        ThreadingModel="STA" />
+              <com:Class Id="6F1D3A27-8C7E-4B1A-9E25-3D5C8A0F7B44"
                         Path="FolderMarker.Shell.dll"
                         ThreadingModel="STA" />
             </com:SurrogateServer>
@@ -56,9 +70,13 @@
             <!-- 只挂「文件夹」本身。空白处（Directory\Background）不再挂 ——
                  那里没有选中对象，菜单会显得多余 -->
             <desktop5:ItemType Type="Directory">
-              <desktop5:Verb Id="FolderMarker" Clsid="6F1D3A24-8C7E-4B1A-9E25-3D5C8A0F7B41" />
-              <!-- 一个包只挂一个 Verb（同一包的第二个 Verb 会被静默丢弃），
-                   所有动作都挂在「文件夹标记」这一层子菜单里。 -->
+              <!-- Id 用数字前缀固定顺序：Explorer 按 Verb Id 字母序排列
+                   flyout 里的命令，直接写 Color/Clear/Manage 会排成 Clear/Color/Manage。
+                   3 个 Verb → Explorer 自动生成「文件夹标记」应用 flyout（第二层），
+                   颜色再展开成 7 色（第三层）。 -->
+              <desktop5:Verb Id="FM01Color"  Clsid="6F1D3A24-8C7E-4B1A-9E25-3D5C8A0F7B41" />
+              <desktop5:Verb Id="FM02Clear"  Clsid="6F1D3A26-8C7E-4B1A-9E25-3D5C8A0F7B43" />
+              <desktop5:Verb Id="FM03Manage" Clsid="6F1D3A27-8C7E-4B1A-9E25-3D5C8A0F7B44" />
             </desktop5:ItemType>
           </desktop4:FileExplorerContextMenus>
         </desktop4:Extension>
