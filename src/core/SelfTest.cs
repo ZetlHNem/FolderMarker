@@ -431,6 +431,42 @@ internal static partial class Program
         check("纯文本文件夹也能标记", rcPlain == 0);
         check("纯文本文件夹不建 native 缓存", !File.Exists(Io(NativeCachePath(dPlain))));
 
+        // --- 场景: 共享盘标记不能被误判成副本（回归：标记过段时间自动消失）---
+        // UNC 路径必须识别成网络盘；副本判定要直接放行，否则用 UNC 标的文件夹
+        // 在另一台电脑上会被当成「从别处复制来的」而自动 clear 掉。
+        string uncSample = @"\\some-server\share\已标记文件夹";
+        check("UNC 路径识别为网络盘", IsNetworkPath(uncSample));
+        string ownerOut;
+        check("UNC 路径不判为副本", !IsForeignMark(uncSample, Path.Combine(uncSample, "desktop.ini"), out ownerOut));
+
+        // 记录里的源路径在共享盘上（UNC）时，即使从别处访问也不判副本
+        string dNetCopy = Path.Combine(Path.GetTempPath(), "FMTest-" + Guid.NewGuid().ToString("N").Substring(0, 8));
+        Directory.CreateDirectory(Io(dNetCopy));
+        made.Add(dNetCopy);
+        int rcNet = Main(new string[] { "set", "blue", dNetCopy, "quiet" });
+        check("网络源路径场景可正常标记", rcNet == 0);
+        string netIni = Path.Combine(Io(dNetCopy), "desktop.ini");
+        // 手工把 State 的 Path 改成一个 UNC 路径，模拟「共享盘同步来的标记」
+        List<string> netLines = ReadIni(netIni);
+        for (int i = 0; i < netLines.Count; i++)
+        {
+            if (netLines[i].Trim().StartsWith("Path=", StringComparison.OrdinalIgnoreCase))
+            { netLines[i] = "Path=" + uncSample; break; }
+        }
+        WriteIni(netIni, netLines);
+        check("源路径在共享盘时不判为副本", !IsForeignMark(dNetCopy, netIni, out ownerOut));
+
+        // 本地文件夹从另一个本地路径复制来的，仍要能识别成副本（别改坏原功能）
+        string dSrc = Path.Combine(Path.GetTempPath(), "FMTest-src-" + Guid.NewGuid().ToString("N").Substring(0, 8));
+        string dCopy = Path.Combine(Path.GetTempPath(), "FMTest-cp-" + Guid.NewGuid().ToString("N").Substring(0, 8));
+        Directory.CreateDirectory(Io(dSrc));
+        Directory.CreateDirectory(Io(dCopy));
+        made.Add(dSrc); made.Add(dCopy);
+        int rcSrc = Main(new string[] { "set", "red", dSrc, "quiet" });
+        check("副本判定-源标记成功", rcSrc == 0);
+        File.Copy(Io(Path.Combine(dSrc, "desktop.ini")), Io(Path.Combine(dCopy, "desktop.ini")), true);
+        check("本地副本仍判为副本", IsForeignMark(dCopy, Path.Combine(dCopy, "desktop.ini"), out ownerOut));
+
             DiagLine("=== 结果: " + pass + " 通过 / " + fail + " 失败 ===");
         }
         catch (Exception ex)
