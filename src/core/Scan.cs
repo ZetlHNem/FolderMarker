@@ -42,10 +42,36 @@ internal static partial class Program
 
     private static DateTime _lastCacheSweep = DateTime.MinValue;
 
-    /// <summary>是不是 UNC 网络路径</summary>
+    /// <summary>是不是 UNC 网络路径（\\server\share\...）</summary>
     private static bool IsUncPath(string folder)
     {
         return !string.IsNullOrEmpty(folder) && folder.StartsWith(@"\\", StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 是不是网络位置：UNC 路径，或「映射网络驱动器」盘符（Z:\...）。
+    /// 关键：IsUncPath 只认 \\ 开头。用户把共享盘映射成 Z: 访问时它返回 false，
+    /// 于是共享盘被当成普通本地盘，副本检测会把「另一台电脑用 UNC 标的文件夹」
+    /// 误判成复制出来的副本而 clear 掉 —— 共享盘标记过段时间就没了。
+    /// 凡是「共享盘不能当副本处理」的地方，都必须用这个函数而不是 IsUncPath。
+    /// </summary>
+    private static bool IsNetworkPath(string folder)
+    {
+        if (string.IsNullOrEmpty(folder)) { return false; }
+        if (IsUncPath(folder)) { return true; }
+
+        try
+        {
+            string full = Path.GetFullPath(Plain(folder));
+            string root = Path.GetPathRoot(full);
+            if (string.IsNullOrEmpty(root)) { return false; }
+            DriveInfo di = new DriveInfo(root);
+            // 不看 IsReady：共享盘临时断开时 IsReady 会变 false，
+            // 这时候更要把它当网络盘保护起来（断线时读不到 ini，绝不能判副本/幽灵）。
+            // DriveType 不需要盘符就绪就能取到，掉线时依然返回 Network。
+            return di.DriveType == DriveType.Network;
+        }
+        catch { return false; }
     }
 
     /// <summary>取 \\server\share 这一段，用来判断整台共享盘是否可达</summary>
