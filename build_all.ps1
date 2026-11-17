@@ -79,8 +79,13 @@ if ($p.ExitCode -ne 0) { Fail ("selftest 失败，退出码 " + $p.ExitCode) }
 $report = Join-Path $env:LOCALAPPDATA "FolderMarker\diagnose.txt"
 if (Test-Path -LiteralPath $report) {
     $txt = Get-Content -LiteralPath $report -Raw -Encoding UTF8
-    if ($txt -notmatch "39 通过 / 0 失败") { Fail "selftest 报告不是 39 通过 / 0 失败" }
-    Log "自检通过：39 / 0"
+    $m = [regex]::Match($txt, "(\d+) 通过 / (\d+) 失败")
+    if (-not $m.Success) { Fail "selftest 报告缺少结果行" }
+    $passN = [int]$m.Groups[1].Value
+    $failN = [int]$m.Groups[2].Value
+    if ($failN -ne 0) { Fail ("selftest 有 " + $failN + " 项失败") }
+    if ($passN -lt 39) { Fail ("selftest 通过数异常: " + $passN) }
+    Log ("自检通过：" + $passN + " / 0")
 } else {
     Log "未找到自检报告，跳过报告检查"
 }
