@@ -314,8 +314,10 @@ internal static partial class Program
 
         try
         {
-            // 当前路径是共享盘：一律不判 —— 那里是跨电脑同步，不能当副本清掉
-            if (IsUncPath(folder)) { return false; }
+            // 当前路径是共享盘（UNC 或映射盘符 Z:\）：一律不判 ——
+            // 那里是跨电脑同步，不能当副本清掉。映射盘符必须算进来，
+            // 否则同一份共享盘用 UNC 标、用 Z: 访问时会被误判成副本删除。
+            if (IsNetworkPath(folder)) { return false; }
 
             string cur;
             try { cur = Path.GetFullPath(Plain(folder)); }
@@ -326,6 +328,10 @@ internal static partial class Program
             // 新数据：以 State 里记录的标记路径为准
             if (st.Valid && !string.IsNullOrEmpty(st.Path))
             {
+                // 记录里的源路径本身就在共享盘上（另一台电脑用 UNC 标的），
+                // 说明这是共享盘同步来的标记，本地无论从哪访问都不能当副本清。
+                if (IsNetworkPath(st.Path)) { return false; }
+
                 if (SamePath(cur, st.Path)) { return false; }
                 ownerPath = st.Path;
                 return true;
@@ -368,12 +374,13 @@ internal static partial class Program
     {
         try
         {
-            if (IsUncPath(folder)) { return; }
+            // 共享盘（UNC / 映射盘符）交给 roots/import 做同步，绝不当副本扫
+            if (IsNetworkPath(folder)) { return; }
 
             string parent;
             try { parent = Path.GetDirectoryName(Path.GetFullPath(Plain(folder))); }
             catch { return; }
-            if (string.IsNullOrEmpty(parent) || IsUncPath(parent)) { return; }
+            if (string.IsNullOrEmpty(parent) || IsNetworkPath(parent)) { return; }
 
             lock (_parentScanLock)
             {
