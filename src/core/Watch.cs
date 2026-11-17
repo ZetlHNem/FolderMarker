@@ -253,7 +253,12 @@ internal static partial class Program
 
                 if (!File.Exists(ini))
                 {
-                    if (Directory.Exists(Io(f)))
+                    // 网络盘（UNC / 映射盘符）读不到 ini 绝不当幽灵：
+                    // SMB 瞬时抖动、另一台电脑正在改写 ini、权限波动都会让
+                    // File.Exists 这一刻返回 false、下一刻又恢复。以前这里直接
+                    // ghosts.Add → 删清单 + 删缓存，正是共享盘标记「过段时间自动没了」。
+                    // 本地盘保持原逻辑（文件夹还在、ini 被删 = 真失效，照常清理）。
+                    if (!IsNetworkPath(f) && Directory.Exists(Io(f)))
                     {
                         ghosts.Add(f);
                     }
@@ -515,7 +520,8 @@ internal static partial class Program
         {
             try
             {
-                if (IsUncPath(f)) { continue; }
+                // 共享盘（UNC / 映射盘符）是跨电脑同步，不是副本，跳过
+                if (IsNetworkPath(f)) { continue; }
 
                 string ini = Path.Combine(Io(f), "desktop.ini");
                 string owner;
