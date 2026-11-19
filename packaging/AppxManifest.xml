@@ -10,6 +10,9 @@
     xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
     IgnorableNamespaces="uap uap10 desktop4 desktop5 com rescap">
 
+  <!-- 1.0.0.25：在 VisualElements 加 AppListEntry="none"，
+       sparse 包不再往开始菜单「所有应用 / 最近添加」注册应用条目 ——
+       否则和安装器建的 {userprograms}\文件夹标记.lnk 一起，开始菜单出现两个。 -->
   <!-- 1.0.0.24：从单 Verb 扩成 3 Verb（颜色 / 清除标记 / 管理）。
        Win11 新版菜单在「一个包只挂一个 Verb」时会把它直接平铺到右键顶层，
        表现为没有「文件夹标记」父级、只剩「颜色」；挂 3 个 Verb 后 Explorer
@@ -17,7 +20,7 @@
        版本必须递增，RegisterMenu.ps1 靠版本号判断要不要重新注册。 -->
   <Identity Name="FolderMarkerShell"
             Publisher="CN=FolderMarker"
-            Version="1.0.0.24"
+            Version="1.0.0.25"
             ProcessorArchitecture="x64" />
 
   <Properties>
@@ -41,6 +44,7 @@
                  uap10:TrustLevel="mediumIL"
                  uap10:RuntimeBehavior="win32App">
       <uap:VisualElements
+          AppListEntry="none"
           DisplayName="文件夹标记"
           Description="右键给文件夹加颜色标记"
           BackgroundColor="transparent"
