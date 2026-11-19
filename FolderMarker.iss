@@ -2,9 +2,9 @@
 ; 生成标准「下一步 → 下一步」安装向导，简体中文界面
 
 #define MyAppName "文件夹标记"
-#define MyAppVersion "2.3.7"
+#define MyAppVersion "2.3.8"
 #define MyAppPublisher "FolderMarker"
-#define ShellExtVer "14"
+#define ShellExtVer "15"
 
 ; 菜单形态开关：
 ;   0 = 经典菜单（注册表 cascade）。支持任意层嵌套，「标记符号」是真三级。
