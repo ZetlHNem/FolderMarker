@@ -477,6 +477,10 @@ internal static partial class Program
         string fakeJson = "{\"tag_name\":\"v2.4.0\",\"assets\":[{\"name\":\"setup.exe\",\"browser_download_url\":\"https://x/setup.exe\",\"uploader\":{\"login\":\"u\",\"id\":1}}]}";
         check("更新JSON-版本号解析", ExtractJsonString(fakeJson, "tag_name") == "v2.4.0");
         check("更新JSON-下载链接解析", ExtractExeAssetUrl(fakeJson) == "https://x/setup.exe");
+        // 主通道：github.com 302 重定向的 Location 解析（免 API 额度，抗限流）
+        check("重定向-tag解析", TagFromLocation("https://github.com/ZetlHNem/FolderMarker/releases/tag/v2.4.1") == "v2.4.1");
+        check("重定向-下载链接拼接", SetupUrlFor("v2.4.1") ==
+            "https://github.com/ZetlHNem/FolderMarker/releases/download/v2.4.1/FolderMarker-setup-v2.4.1.exe");
 
             DiagLine("=== 结果: " + pass + " 通过 / " + fail + " 失败 ===");
         }
