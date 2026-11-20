@@ -467,6 +467,15 @@ internal static partial class Program
         File.Copy(Io(Path.Combine(dSrc, "desktop.ini")), Io(Path.Combine(dCopy, "desktop.ini")), true);
         check("本地副本仍判为副本", IsForeignMark(dCopy, Path.Combine(dCopy, "desktop.ini"), out ownerOut));
 
+        // --- 场景: 在线更新的版本比较与 JSON 解析（不联网）---
+        check("版本比较-更新版更新", IsNewerVersion("v2.3.9", "2.3.8"));
+        check("版本比较-当前版不更新", !IsNewerVersion("v2.3.8", "2.3.8"));
+        check("版本比较-旧版不更新", !IsNewerVersion("v2.3.7", "2.3.8"));
+        check("版本比较-跨大版本", IsNewerVersion("v3.0.0", "2.9.9"));
+        string fakeJson = "{\"tag_name\":\"v2.4.0\",\"assets\":[{\"name\":\"setup.exe\",\"browser_download_url\":\"https://x/setup.exe\"}]}";
+        check("更新JSON-版本号解析", ExtractJsonString(fakeJson, "tag_name") == "v2.4.0");
+        check("更新JSON-下载链接解析", ExtractExeAssetUrl(fakeJson) == "https://x/setup.exe");
+
             DiagLine("=== 结果: " + pass + " 通过 / " + fail + " 失败 ===");
         }
         catch (Exception ex)
