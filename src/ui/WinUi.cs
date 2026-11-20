@@ -1019,3 +1019,174 @@ internal sealed class DialogWindow : Window
         };
     }
 }
+
+/// <summary>
+/// 统一的动效工具：给用户操作一点「有生命」的反馈，但保持 WinUI 的克制。
+/// 全部用 WPF Storyboard（不依赖 Windows App SDK），动画时长短、缓动柔和，
+/// 且尊重系统的「减少动画」设置（关掉时立即呈现最终状态）。
+/// </summary>
+internal static class WinMotion
+{
+    private static bool Reduced
+    {
+        get
+        {
+            try
+            {
+                return System.Windows.SystemParameters.ClientAreaAnimation == false;
+            }
+            catch { return false; }
+        }
+    }
+
+    private static System.Windows.Media.Animation.EasingFunctionBase Ease()
+    {
+        System.Windows.Media.Animation.CubicEase e = new System.Windows.Media.Animation.CubicEase();
+        e.EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut;
+        return e;
+    }
+
+    /// <summary>淡入 + 从下往上轻微滑入。页面切换、内容出现用。</summary>
+    public static void SlideFadeIn(UIElement el, double fromY, int durationMs)
+    {
+        if (el == null) { return; }
+        try
+        {
+            // 先清掉上一次动画对属性的持有，否则重复切换页时新动画不生效（WPF 常见坑）
+            el.BeginAnimation(UIElement.OpacityProperty, null);
+            el.Opacity = 0;
+            el.RenderTransform = new System.Windows.Media.TranslateTransform(0, fromY);
+
+            if (Reduced)
+            {
+                el.Opacity = 1;
+                el.RenderTransform = null;
+                return;
+            }
+
+            System.Windows.Media.Animation.Storyboard sb = new System.Windows.Media.Animation.Storyboard();
+            System.Windows.Media.Animation.DoubleAnimation fade =
+                new System.Windows.Media.Animation.DoubleAnimation(0, 1,
+                    System.TimeSpan.FromMilliseconds(durationMs));
+            fade.EasingFunction = Ease();
+            System.Windows.Media.Animation.Storyboard.SetTarget(fade, el);
+            System.Windows.Media.Animation.Storyboard.SetTargetProperty(fade,
+                new System.Windows.PropertyPath(UIElement.OpacityProperty));
+            sb.Children.Add(fade);
+
+            System.Windows.Media.Animation.DoubleAnimation move =
+                new System.Windows.Media.Animation.DoubleAnimation(fromY, 0,
+                    System.TimeSpan.FromMilliseconds(durationMs));
+            move.EasingFunction = Ease();
+            System.Windows.Media.Animation.Storyboard.SetTarget(move, el);
+            System.Windows.Media.Animation.Storyboard.SetTargetProperty(move,
+                new System.Windows.PropertyPath("(UIElement.RenderTransform).(TranslateTransform.Y)"));
+            sb.Children.Add(move);
+
+            sb.Begin((System.Windows.FrameworkElement)el);
+        }
+        catch
+        {
+            try { el.Opacity = 1; el.RenderTransform = null; } catch { }
+        }
+    }
+
+    /// <summary>纯淡入。轻量元素出现用。</summary>
+    public static void FadeIn(UIElement el, int durationMs)
+    {
+        if (el == null) { return; }
+        try
+        {
+            if (Reduced) { el.Opacity = 1; return; }
+            el.BeginAnimation(UIElement.OpacityProperty, null);
+            el.Opacity = 0;
+            System.Windows.Media.Animation.DoubleAnimation fade =
+                new System.Windows.Media.Animation.DoubleAnimation(0, 1,
+                    System.TimeSpan.FromMilliseconds(durationMs));
+            fade.EasingFunction = Ease();
+            el.BeginAnimation(UIElement.OpacityProperty, fade);
+        }
+        catch { try { el.Opacity = 1; } catch { } }
+    }
+
+    /// <summary>窗口打开：整体轻微放大淡入。</summary>
+    public static void WindowOpen(Window win)
+    {
+        if (win == null) { return; }
+        try
+        {
+            if (Reduced) { return; }
+            win.Opacity = 0;
+            System.Windows.Media.ScaleTransform sc = new System.Windows.Media.ScaleTransform(0.96, 0.96);
+            sc.CenterX = win.Width / 2;
+            sc.CenterY = win.Height / 2;
+            win.RenderTransform = sc;
+
+            System.Windows.Media.Animation.Storyboard sb = new System.Windows.Media.Animation.Storyboard();
+            System.Windows.Media.Animation.DoubleAnimation fade =
+                new System.Windows.Media.Animation.DoubleAnimation(0, 1,
+                    System.TimeSpan.FromMilliseconds(180));
+            fade.EasingFunction = Ease();
+            System.Windows.Media.Animation.Storyboard.SetTarget(fade, win);
+            System.Windows.Media.Animation.Storyboard.SetTargetProperty(fade,
+                new System.Windows.PropertyPath(Window.OpacityProperty));
+            sb.Children.Add(fade);
+
+            System.Windows.Media.Animation.DoubleAnimation sx =
+                new System.Windows.Media.Animation.DoubleAnimation(0.96, 1,
+                    System.TimeSpan.FromMilliseconds(180));
+            sx.EasingFunction = Ease();
+            System.Windows.Media.Animation.Storyboard.SetTarget(sx, win);
+            System.Windows.Media.Animation.Storyboard.SetTargetProperty(sx,
+                new System.Windows.PropertyPath("(Window.RenderTransform).(ScaleTransform.ScaleX)"));
+            sb.Children.Add(sx);
+
+            System.Windows.Media.Animation.DoubleAnimation sy =
+                new System.Windows.Media.Animation.DoubleAnimation(0.96, 1,
+                    System.TimeSpan.FromMilliseconds(180));
+            sy.EasingFunction = Ease();
+            System.Windows.Media.Animation.Storyboard.SetTarget(sy, win);
+            System.Windows.Media.Animation.Storyboard.SetTargetProperty(sy,
+                new System.Windows.PropertyPath("(Window.RenderTransform).(ScaleTransform.ScaleY)"));
+            sb.Children.Add(sy);
+
+            sb.Begin(win);
+        }
+        catch { try { win.Opacity = 1; win.RenderTransform = null; } catch { } }
+    }
+
+    /// <summary>按钮按下/悬停的轻微缩放反馈，绑在 Border 上。</summary>
+    public static void PressFeedback(Border target)
+    {
+        if (target == null) { return; }
+        try
+        {
+            target.MouseLeftButtonDown += delegate
+            {
+                if (Reduced) { return; }
+                System.Windows.Media.ScaleTransform sc = new System.Windows.Media.ScaleTransform(1, 1);
+                target.RenderTransform = sc;
+                target.RenderTransformOrigin = new System.Windows.Point(0.5, 0.5);
+                System.Windows.Media.Animation.DoubleAnimation a =
+                    new System.Windows.Media.Animation.DoubleAnimation(1, 0.96,
+                        System.TimeSpan.FromMilliseconds(80));
+                a.EasingFunction = Ease();
+                sc.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, a);
+                sc.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, a);
+            };
+            target.MouseLeftButtonUp += delegate
+            {
+                if (Reduced) { return; }
+                System.Windows.Media.ScaleTransform sc = target.RenderTransform as System.Windows.Media.ScaleTransform;
+                if (sc == null) { return; }
+                System.Windows.Media.Animation.DoubleAnimation a =
+                    new System.Windows.Media.Animation.DoubleAnimation(0.96, 1,
+                        System.TimeSpan.FromMilliseconds(120));
+                a.EasingFunction = Ease();
+                sc.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, a);
+                sc.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, a);
+            };
+        }
+        catch { }
+    }
+}
