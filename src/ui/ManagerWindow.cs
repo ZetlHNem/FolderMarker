@@ -286,6 +286,9 @@ internal static partial class Program
             };
             timer.Start();
 
+            // 窗口打开动效：轻微放大淡入
+            Loaded += delegate { WinMotion.WindowOpen(this); };
+
             // 启动自动检查更新：开相关设置且在 UI 空闲时才跑，失败静默
             if (Program.GetSettingInt("AutoUpdate", 1) != 0)
             {
@@ -675,14 +678,31 @@ internal static partial class Program
                 bool on = (k == index);
                 Border bg = navItems[k].Tag as Border;
                 if (bg != null) { bg.Background = on ? WinUi.B("NavSelected") : Brushes.Transparent; }
-                navBars[k].Opacity = on ? 1 : 0;
+                // 导航指示条：淡入淡出过渡，不再是硬切换
+                AnimateOpacity(navBars[k], on ? 1 : 0, 160);
                 navIcons[k].Foreground = on ? WinUi.B("TextPrimary") : WinUi.B("TextSecondary");
                 navTexts[k].Foreground = on ? WinUi.B("TextPrimary") : WinUi.B("TextSecondary");
                 navTexts[k].FontWeight = on ? FontWeights.SemiBold : FontWeights.Normal;
                 pages[k].Visibility = on ? Visibility.Visible : Visibility.Collapsed;
             }
+            // 当前页内容：淡入 + 轻微上移，给切换一点节奏感（CubicEase 收尾柔和）
+            WinMotion.SlideFadeIn(pages[index], 12, 200);
+            WinMotion.FadeIn(pageTitle, 180);
             pageTitle.Text = Titles[index];
             pageSub.Text = Subs[index];
+        }
+
+        /// <summary>把元素的 Opacity 平滑过渡到目标值</summary>
+        private static void AnimateOpacity(UIElement el, double to, int ms)
+        {
+            if (el == null) { return; }
+            try
+            {
+                DoubleAnimation a = new DoubleAnimation(to, System.TimeSpan.FromMilliseconds(ms));
+                a.EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut };
+                el.BeginAnimation(UIElement.OpacityProperty, a);
+            }
+            catch { try { el.Opacity = to; } catch { } }
         }
 
         // =================================================================
