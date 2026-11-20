@@ -207,6 +207,89 @@ internal static partial class Program
         }
     }
 
+    /// <summary>
+    /// UI 冒烟测试：把管理台真正渲染成 PNG，用来核对模板/布局/动效有没有被改坏。
+    /// 比起「编译通过」可靠得多 —— XAML 模板是运行时解析的，写错了只会静默退回系统默认外观。
+    /// 用法：FolderMarker.exe uiprobe [输出路径]
+    /// </summary>
+    private static int RunUiProbe(string[] args)
+    {
+        string outPath = args.Length > 1 && !string.IsNullOrEmpty(args[1])
+            ? args[1]
+            : System.IO.Path.Combine(DataDirPath(), "ui_probe.png");
+
+        // 渲染期间临时关掉自动检查更新，避免弹窗打断
+        int oldAuto = GetSettingInt("AutoUpdate", 1);
+        SetSetting("AutoUpdate", "0");
+
+        System.Windows.Application app = new System.Windows.Application();
+        ManagerWindow w = new ManagerWindow();
+        w.WindowStartupLocation = System.Windows.WindowStartupLocation.Manual;
+        w.Left = -20000;      // 挪到屏幕外，别闪到用户
+        w.Top = 0;
+        w.Show();
+
+        System.Windows.Threading.DispatcherTimer t = new System.Windows.Threading.DispatcherTimer();
+        t.Interval = System.TimeSpan.FromMilliseconds(1500);
+        t.Tick += delegate
+        {
+            t.Stop();
+            try
+            {
+                int pw = (int)System.Math.Max(1, w.ActualWidth);
+                int ph = (int)System.Math.Max(1, w.ActualHeight);
+                System.Windows.Media.Imaging.RenderTargetBitmap rtb =
+                    new System.Windows.Media.Imaging.RenderTargetBitmap(
+                        pw, ph, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+                rtb.Render(w);
+                System.Windows.Media.Imaging.PngBitmapEncoder enc =
+                    new System.Windows.Media.Imaging.PngBitmapEncoder();
+                enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(rtb));
+                using (System.IO.FileStream fs = new System.IO.FileStream(outPath,
+                    System.IO.FileMode.Create, System.IO.FileAccess.Write))
+                {
+                    enc.Save(fs);
+                }
+                DiagLine("uiprobe 已保存: " + outPath + "  " + pw + "x" + ph);
+                // 虚拟化验证：已实例化的行容器数应远小于总条目数，否则滚动会卡
+                DiagLine("uiprobe 列表: " + w.ProbeListStats());
+            }
+            catch (System.Exception ex)
+            {
+                DiagLine("uiprobe 失败: " + ex.Message);
+            }
+            finally
+            {
+                SetSetting("AutoUpdate", oldAuto == 0 ? "0" : "1");
+                app.Shutdown();
+            }
+        };
+        t.Start();
+        app.Run();
+        DiagEnd();
+        return 0;
+    }
+
+    /// <summary>统计视觉树里某种类型的元素数量（虚拟化/渲染诊断用）</summary>
+    private static int CountVisuals(System.Windows.DependencyObject root, Type type)
+    {
+        int n = 0;
+        if (root == null) { return 0; }
+        try
+        {
+            int count = System.Windows.Media.VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                System.Windows.DependencyObject child =
+                    System.Windows.Media.VisualTreeHelper.GetChild(root, i);
+                if (child != null && type.IsInstanceOfType(child)) { n++; }
+                n += CountVisuals(child, type);
+            }
+        }
+        catch { }
+        return n;
+    }
+
     /// <summary>自检用：给临时文件夹里放一张会出三明治预览的测试图</summary>
     private static void WriteTestImage(string dir)
     {
@@ -481,6 +564,12 @@ internal static partial class Program
         check("重定向-tag解析", TagFromLocation("https://github.com/ZetlHNem/FolderMarker/releases/tag/v2.4.1") == "v2.4.1");
         check("重定向-下载链接拼接", SetupUrlFor("v2.4.1") ==
             "https://github.com/ZetlHNem/FolderMarker/releases/download/v2.4.1/FolderMarker-setup-v2.4.1.exe");
+
+        // --- 场景: UI 资源模板能否解析（模板写错会静默退回系统默认外观，肉眼才发现）---
+        check("UI资源-XAML解析成功", WinUi.Res != null && WinUi.Res.Count > 0);
+        check("UI资源-按钮样式存在", WinUi.S("WinButton") != null);
+        check("UI资源-强调按钮样式存在", WinUi.S("WinAccentButton") != null);
+        check("UI资源-列表样式存在", WinUi.S("WinListView") != null);
 
             DiagLine("=== 结果: " + pass + " 通过 / " + fail + " 失败 ===");
         }
