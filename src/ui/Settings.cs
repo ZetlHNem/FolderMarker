@@ -42,6 +42,12 @@ internal static partial class Program
 
             card.Children.Add(Sep());
 
+            tgAutoUpdate = MakeToggle();
+            card.Children.Add(MakeRow("启动时自动检查更新",
+                "从 GitHub 检查新版本，发现后提示你选择是否更新；关掉就只在「关于」页手动检查", tgAutoUpdate));
+
+            card.Children.Add(Sep());
+
             cbTheme = MakeCombo(
                 new string[] { "跟随系统", "浅色", "深色" },
                 new int[] { 0, 1, 2 });
@@ -290,6 +296,10 @@ internal static partial class Program
             {
                 tgAutoFollow.IsChecked = GetSettingInt("AutoFollow", 1) != 0;
             }
+            if (tgAutoUpdate != null)
+            {
+                tgAutoUpdate.IsChecked = GetSettingInt("AutoUpdate", 1) != 0;
+            }
             if (rulesBox != null)
             {
                 try
@@ -367,6 +377,7 @@ internal static partial class Program
             SetSetting("WatchInterval", watch.ToString());
             SetSetting("RootScanMinutes", scan.ToString());
             SetSetting("AutoFollow", autoFollow ? "1" : "0");
+            SetSetting("AutoUpdate", (tgAutoUpdate != null && tgAutoUpdate.IsChecked == true) ? "1" : "0");
             SetSetting("Theme", theme.ToString());
 
             bool regOk = SetAutoStart(autoStart);
