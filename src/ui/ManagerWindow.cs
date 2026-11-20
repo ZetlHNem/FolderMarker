@@ -1642,12 +1642,18 @@ internal static partial class Program
                 }
 
                 body.Visibility = Visibility.Visible;
+                body.Clip = null;
                 body.MaxHeight = 0;
+
+                // 关键：先强制布局一次，让 MaxHeight=0 真正生效。
+                // 否则 Visibility 刚变 Visible 时布局还没跑，动画启动时高度并未被压到 0，
+                // 等内容真正布局时动画已经走过一段 —— 看起来就是「没有动画直接弹出」。
+                try { body.UpdateLayout(); } catch { }
 
                 double h = EstimateGroupHeight(ex);
                 DoubleAnimation a = new DoubleAnimation(0, h,
-                    System.TimeSpan.FromMilliseconds(230));
-                a.EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut };
+                    System.TimeSpan.FromMilliseconds(240));
+                a.EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut };
                 a.Completed += delegate
                 {
                     try
@@ -1681,29 +1687,40 @@ internal static partial class Program
 
                 if (suppressGroupAnim)
                 {
+                    body.Clip = null;
                     body.Visibility = Visibility.Collapsed;
                     body.MaxHeight = double.PositiveInfinity;
                     return;
                 }
 
                 double h = body.ActualHeight;
+                double w = body.ActualWidth;
                 if (h <= 1) { h = EstimateGroupHeight(ex); }
+                if (w <= 1) { w = Math.Max(1, list.ActualWidth); }
 
-                DoubleAnimation a = new DoubleAnimation(h, 0,
-                    System.TimeSpan.FromMilliseconds(170));
-                a.EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut };
-                a.Completed += delegate
+                // 收起用 Clip 裁剪动画，而不是改 MaxHeight：
+                // 改布局高度会让 VirtualizingStackPanel 反复重算可见行、回收容器，
+                // 那一帧就是用户看到的「闪烁」。Clip 只影响绘制，不触发布局，行不会重建。
+                RectangleGeometry clip = new RectangleGeometry(new Rect(0, 0, w, h));
+                body.Clip = clip;
+
+                RectAnimation ra = new RectAnimation(
+                    new Rect(0, 0, w, h), new Rect(0, 0, w, 0),
+                    System.TimeSpan.FromMilliseconds(200));
+                // EaseInOut：首尾都慢，中间快 —— 收起过程能看清内容被「卷上去」
+                ra.EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut };
+                ra.Completed += delegate
                 {
                     try
                     {
-                        body.BeginAnimation(FrameworkElement.MaxHeightProperty, null);
-                        body.MaxHeight = double.PositiveInfinity;
-                        // 关键：动画收完再彻底移除布局占位，下方内容才会真正上移
+                        body.Clip = null;
+                        // 裁到 0 之后再退出布局：此时视觉上已无内容，空间归位不会造成跳变
                         body.Visibility = Visibility.Collapsed;
+                        body.MaxHeight = double.PositiveInfinity;
                     }
                     catch { }
                 };
-                body.BeginAnimation(FrameworkElement.MaxHeightProperty, a);
+                clip.BeginAnimation(RectangleGeometry.RectProperty, ra);
             }
             catch { }
         }
@@ -1746,6 +1763,7 @@ internal static partial class Program
                         ? ex.Template.FindName("Body", ex) as Border : null;
                     if (body != null)
                     {
+                        body.Clip = null;
                         body.Visibility = Visibility.Collapsed;
                         body.MaxHeight = double.PositiveInfinity;
                     }
