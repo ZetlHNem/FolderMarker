@@ -176,7 +176,7 @@ internal static partial class Program
 
             System.Threading.Thread t = new System.Threading.Thread(delegate()
             {
-                string err = DownloadAndInstall(info);
+                string err = DownloadAndInstall(info, null);
                 if (err != null)
                 {
                     WF.MessageBox.Show("更新失败：" + err, "文件夹标记",
