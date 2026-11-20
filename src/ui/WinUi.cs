@@ -1190,3 +1190,130 @@ internal static class WinMotion
         catch { }
     }
 }
+
+/// <summary>
+/// 更新进度窗口：下载安装包时实时显示进度条与状态文字。
+/// 样式沿用 DialogWindow 的遮罩 + 白卡片，居中盖在宿主窗口上。
+/// 用 Show() 非模态显示，下载线程通过 SetProgress 回 UI 线程更新。
+/// </summary>
+internal sealed class UpdateProgressWindow : Window
+{
+    private readonly TextBlock statusText;
+    private readonly TextBlock percentText;
+    private readonly System.Windows.Controls.ProgressBar bar;
+
+    public UpdateProgressWindow(Window owner, string version)
+    {
+        WindowStyle = WindowStyle.None;
+        AllowsTransparency = true;
+        Background = Brushes.Transparent;
+        ResizeMode = ResizeMode.NoResize;
+        ShowInTaskbar = false;
+        FontFamily = new FontFamily(WinUi.FontUi);
+        FontSize = WinUi.SizeBody;
+
+        if (owner != null)
+        {
+            Owner = owner;
+            Left = owner.Left;
+            Top = owner.Top;
+            Width = owner.ActualWidth;
+            Height = owner.ActualHeight;
+            WindowStartupLocation = WindowStartupLocation.Manual;
+        }
+        else
+        {
+            Width = 460;
+            Height = 320;
+            WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        }
+
+        Grid root = new Grid();
+        Border scrim = new Border();
+        scrim.Background = new SolidColorBrush(Color.FromArgb(0x66, 0x00, 0x00, 0x00));
+        root.Children.Add(scrim);
+
+        Border card = new Border();
+        card.Width = 448;
+        card.Background = new SolidColorBrush(Colors.White);
+        card.CornerRadius = new CornerRadius(8);
+        card.Padding = new Thickness(24, 22, 24, 22);
+        card.HorizontalAlignment = HorizontalAlignment.Center;
+        card.VerticalAlignment = VerticalAlignment.Center;
+        card.BorderBrush = new SolidColorBrush(Color.FromArgb(0x14, 0, 0, 0));
+        card.BorderThickness = new Thickness(1);
+        DropShadowEffect sh = new DropShadowEffect();
+        sh.BlurRadius = 32;
+        sh.ShadowDepth = 8;
+        sh.Opacity = 0.22;
+        sh.Color = Colors.Black;
+        card.Effect = sh;
+
+        StackPanel body = new StackPanel();
+
+        TextBlock t = new TextBlock();
+        t.Text = "正在更新到 " + version;
+        t.FontSize = 20;
+        t.FontWeight = FontWeights.SemiBold;
+        t.Foreground = WinUi.B("TextPrimary");
+        body.Children.Add(t);
+
+        statusText = new TextBlock();
+        statusText.Text = "正在连接 GitHub…";
+        statusText.FontSize = WinUi.SizeBody;
+        statusText.Foreground = WinUi.B("TextSecondary");
+        statusText.Margin = new Thickness(0, 14, 0, 0);
+        statusText.TextWrapping = TextWrapping.Wrap;
+        body.Children.Add(statusText);
+
+        bar = new System.Windows.Controls.ProgressBar();
+        bar.Height = 6;
+        bar.Minimum = 0;
+        bar.Maximum = 100;
+        bar.Value = 0;
+        bar.IsIndeterminate = false;
+        bar.Foreground = WinUi.B("AccentFill");
+        bar.Background = WinUi.B("DividerStroke");
+        bar.Margin = new Thickness(0, 18, 0, 0);
+        body.Children.Add(bar);
+
+        percentText = new TextBlock();
+        percentText.Text = "0%";
+        percentText.FontSize = WinUi.SizeCaption;
+        percentText.Foreground = WinUi.B("TextTertiary");
+        percentText.HorizontalAlignment = HorizontalAlignment.Right;
+        percentText.Margin = new Thickness(0, 8, 0, 0);
+        body.Children.Add(percentText);
+
+        TextBlock note = new TextBlock();
+        note.Text = "下载完成后会自动安装并重启程序，期间窗口可能关闭。";
+        note.FontSize = WinUi.SizeCaption;
+        note.Foreground = WinUi.B("TextTertiary");
+        note.TextWrapping = TextWrapping.Wrap;
+        note.Margin = new Thickness(0, 16, 0, 0);
+        body.Children.Add(note);
+
+        card.Child = body;
+        root.Children.Add(card);
+        Content = root;
+
+        WinMotion.FadeIn(card, 160);
+    }
+
+    /// <summary>由下载线程调用，内部切回 UI 线程更新进度条与文字</summary>
+    public void SetProgress(int percent, string status)
+    {
+        try
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.BeginInvoke(new Action(delegate { SetProgress(percent, status); }));
+                return;
+            }
+            bar.Value = percent;
+            percentText.Text = percent + "%";
+            if (!string.IsNullOrEmpty(status)) { statusText.Text = status; }
+        }
+        catch { }
+    }
+}
