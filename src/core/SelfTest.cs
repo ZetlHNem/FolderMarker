@@ -276,29 +276,63 @@ internal static partial class Program
                     double before = body != null ? body.ActualHeight : -1;
                     DiagLine("uiprobe 收起前: Body=" + (body == null ? "未找到" : "找到") +
                              "，高度 " + Math.Round(before) + "px");
-                    ex.IsExpanded = false;
+                    DiagLine("uiprobe " + w.ProbeCollapseFirstGroup());   // 模拟用户点击收起
 
+                    // 多阶段验证：
+                    //  2) 收起后高度归零 + Visibility=Collapsed（不留白）
+                    //  3) 切到别的 tab 再切回，分组应保持收起（不被重置成展开）
                     t2 = new System.Windows.Threading.DispatcherTimer();
-                    t2.Interval = System.TimeSpan.FromMilliseconds(420);
+                    t2.Interval = System.TimeSpan.FromMilliseconds(450);
                     System.Windows.Controls.Expander exRef = ex;
                     System.Windows.Controls.Border bodyRef = body;
+                    int phase = 0;
+                    double beforeH = before;
                     t2.Tick += delegate
                     {
-                        t2.Stop();
+                        phase++;
                         try
                         {
-                            double after = bodyRef != null ? bodyRef.ActualHeight : -1;
-                            DiagLine("uiprobe 分组收起: 收起前 " + Math.Round(before) + "px，收起后 "
-                                + Math.Round(after) + "px" + (after >= 0 && after < 6 ? "  → 正常" : "  → 异常"));
-                            exRef.IsExpanded = true;
+                            if (phase == 1)
+                            {
+                                double after = bodyRef != null ? bodyRef.ActualHeight : -1;
+                                string vis = bodyRef != null ? bodyRef.Visibility.ToString() : "?";
+                                DiagLine("uiprobe 收起后: 高度 " + Math.Round(after) + "px，Visibility=" + vis +
+                                         (after >= 0 && after < 6 && vis == "Collapsed"
+                                            ? "  → 正常（已完全退出布局）" : "  → 异常（会留白）"));
+                                DiagLine("uiprobe " + w.ProbeCollapsedInfo());
+                                // 切到守护进程页，再切回清单
+                                w.ProbeSwitchTab(1);
+                                return;
+                            }
+                            if (phase == 2)
+                            {
+                                w.ProbeSwitchTab(0);
+                                return;
+                            }
+
+                            // phase 3：切回后检查该分组是否仍收起
+                            t2.Stop();
+                            System.Windows.Controls.Expander again = FindFirstExpander(w);
+                            bool stillCollapsed = again != null && !again.IsExpanded;
+                            DiagLine("uiprobe 切 tab 后: 分组 " +
+                                     (again == null ? "未找到" : (again.IsExpanded ? "又被展开了" : "仍保持收起")) +
+                                     (stillCollapsed ? "  → 正常" : "  → 异常"));
+                            DiagLine("uiprobe 切 tab 后状态: " + w.ProbeCollapsedInfo());
                         }
-                        catch (Exception tex2) { DiagLine("uiprobe 收起检查异常: " + tex2.Message); }
-                        SetSetting("AutoUpdate", oldAuto == 0 ? "0" : "1");
-                        app.Shutdown();
+                        catch (Exception tex2) { DiagLine("uiprobe 阶段检查异常: " + tex2.Message); }
+                        finally
+                        {
+                            // 只有跑完第三阶段（切回并检查）才收尾
+                            if (phase >= 3)
+                            {
+                                SetSetting("AutoUpdate", oldAuto == 0 ? "0" : "1");
+                                app.Shutdown();
+                            }
+                        }
                     };
                     t2.Start();
                     deferShutdown = true;
-                    return;   // 交给第二段定时器收尾
+                    return;   // 交给多阶段定时器收尾
                 }
             }
             catch (System.Exception ex)
