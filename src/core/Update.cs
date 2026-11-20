@@ -151,8 +151,9 @@ internal static partial class Program
     /// <summary>
     /// 下载安装包到临时目录并静默安装。返回 null 表示成功，否则是错误说明。
     /// 下载完先校验是 PE 文件（MZ 头）再执行，避免把错误页当安装包跑。
+    /// progress(percent, status) 可选：UI 用来显示实时进度，null 表示不报进度。
     /// </summary>
-    private static string DownloadAndInstall(UpdateInfo info)
+    private static string DownloadAndInstall(UpdateInfo info, Action<int, string> progress)
     {
         string temp = null;
         try
@@ -163,10 +164,33 @@ internal static partial class Program
             temp = Path.Combine(Path.GetTempPath(),
                 "FolderMarker-setup-" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".exe");
 
+            if (progress != null) { progress(0, "正在连接 GitHub…"); }
+
+            // 用异步下载 + 事件拿进度；ManualResetEvent 把异步等成同步，保持调用方契约不变
             using (WebClient wc = new WebClient())
+            using (System.Threading.ManualResetEvent done = new System.Threading.ManualResetEvent(false))
             {
+                Exception downloadError = null;
                 wc.Headers.Add("User-Agent", "FolderMarker-Updater");
-                wc.DownloadFile(info.DownloadUrl, temp);
+                wc.DownloadProgressChanged += delegate(object s, DownloadProgressChangedEventArgs e)
+                {
+                    if (progress != null)
+                    {
+                        progress(e.ProgressPercentage,
+                            string.Format("正在下载 {0}%  ({1:N1} / {2:N1} MB)",
+                                e.ProgressPercentage,
+                                e.BytesReceived / 1048576.0,
+                                e.TotalBytesToReceive > 0 ? e.TotalBytesToReceive / 1048576.0 : 0.0));
+                    }
+                };
+                wc.DownloadFileCompleted += delegate(object s, System.ComponentModel.AsyncCompletedEventArgs e)
+                {
+                    if (e.Error != null) { downloadError = e.Error; }
+                    done.Set();
+                };
+                wc.DownloadFileAsync(new Uri(info.DownloadUrl), temp);
+                done.WaitOne();
+                if (downloadError != null) { throw downloadError; }
             }
 
             // 基本校验：必须是可执行文件且带 MZ 头，大小合理（>1MB）
@@ -178,6 +202,8 @@ internal static partial class Program
                 if (fs.Read(head, 0, 2) < 2 || head[0] != (byte)'M' || head[1] != (byte)'Z')
                 { return "下载的不是有效的安装程序"; }
             }
+
+            if (progress != null) { progress(100, "下载完成，正在安装…"); }
 
             ProcessStartInfo psi = new ProcessStartInfo(temp);
             psi.Arguments = "/VERYSILENT /NORESTART /MERGETASKS=!desktopicon";
@@ -272,7 +298,7 @@ internal static partial class Program
         Diag("下载: " + info.DownloadUrl);
         if (newer && args.Length > 1 && args[1].Equals("install", StringComparison.OrdinalIgnoreCase))
         {
-            string err = DownloadAndInstall(info);
+            string err = DownloadAndInstall(info, null);
             if (err != null) { Diag("安装失败: " + err); return 2; }
             Diag("已开始安装 " + info.Version);
         }
