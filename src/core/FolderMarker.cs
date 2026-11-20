@@ -152,6 +152,10 @@ internal static partial class Program
             // 回归自检
             case "selftest":
                 return RunSelfTest();
+
+            // 在线更新：检查 GitHub 最新版（可带 install 参数直接下载安装）
+            case "update":
+                return CmdUpdate(args);
         }
 
         // 剩下的是「针对单个文件夹」的命令
