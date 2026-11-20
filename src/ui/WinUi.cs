@@ -1399,11 +1399,17 @@ internal static class WinMotion
 /// </summary>
 internal static class SmoothScroll
 {
-    private static readonly DependencyProperty TargetProperty =
-        DependencyProperty.RegisterAttached("Target", typeof(double), typeof(SmoothScroll),
-            new PropertyMetadata(0.0, OnTargetChanged));
+    // 参与动画的「当前偏移」：动画每帧推进它，回调里真正滚动
+    private static readonly DependencyProperty OffsetProperty =
+        DependencyProperty.RegisterAttached("Offset", typeof(double), typeof(SmoothScroll),
+            new PropertyMetadata(0.0, OnOffsetChanged));
 
-    private static void OnTargetChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    // 上一次的目标偏移（不参与动画）：连续滚轮时从它继续累加，不会被打断后跳回
+    private static readonly DependencyProperty GoalProperty =
+        DependencyProperty.RegisterAttached("Goal", typeof(double), typeof(SmoothScroll),
+            new PropertyMetadata(0.0));
+
+    private static void OnOffsetChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         ScrollViewer sv = d as ScrollViewer;
         if (sv == null) { return; }
@@ -1435,41 +1441,42 @@ internal static class SmoothScroll
                     if (e.Delta > 0 && !canUp) { return; }
                     if (e.Delta < 0 && !canDown) { return; }
 
-                    double step;
-                    if (sv.CanContentScroll)
+                    // 步长统一按「像素」算。列表已设 ScrollUnit.Pixel（见 ManagerWindow），
+                    // 所以 VirtualizingStackPanel 也能逐像素滚动 —— 若按项滚动，动画必然一顿一顿。
+                    int lines = System.Windows.SystemParameters.WheelScrollLines;
+                    if (lines <= 0) { lines = 3; }
+                    double step = lines * 36.0;
+
+                    // 连续滚轮：从「上一次的目标」继续累加；距实际位置太远说明换了滚动区，重新取当前
+                    double goal = (double)sv.GetValue(GoalProperty);
+                    double actual = sv.VerticalOffset;
+                    if (double.IsNaN(goal) || Math.Abs(goal - actual) > step * 6)
                     {
-                        step = 3;   // 单位是「项」：和系统默认的 3 行一致
-                    }
-                    else
-                    {
-                        step = System.Windows.SystemParameters.WheelScrollLines > 0
-                            ? System.Windows.SystemParameters.WheelScrollLines * 32.0
-                            : 96.0;
+                        goal = actual;
                     }
 
-                    // 连续滚动时从「上一次动画的目标」继续，避免动画被打断后跳回
-                    double from = (double)sv.GetValue(TargetProperty);
-                    if (double.IsNaN(from) || Math.Abs(from - sv.VerticalOffset) > step * 4)
-                    {
-                        from = sv.VerticalOffset;
-                    }
-
-                    double target = from + (e.Delta > 0 ? -step : step);
+                    double target = goal + (e.Delta > 0 ? -step : step);
                     if (target < 0) { target = 0; }
                     if (target > sv.ScrollableHeight) { target = sv.ScrollableHeight; }
+                    if (Math.Abs(target - actual) < 0.5 && Math.Abs(target - goal) < 0.5) { return; }
 
                     e.Handled = true;
+                    sv.SetValue(GoalProperty, target);
 
+                    // 关键：From 必须显式给「当前实际位置」。
+                    // 之前只给 To，而基础值又被设成 To，动画等于从 To 到 To —— 完全没动，
+                    // 每次滚轮都是瞬移一步，看起来就是「一顿一顿」。
                     System.Windows.Media.Animation.DoubleAnimation a =
-                        new System.Windows.Media.Animation.DoubleAnimation(target,
-                            System.TimeSpan.FromMilliseconds(160));
+                        new System.Windows.Media.Animation.DoubleAnimation(
+                            actual, target, System.TimeSpan.FromMilliseconds(220));
                     System.Windows.Media.Animation.CubicEase ease =
                         new System.Windows.Media.Animation.CubicEase();
                     ease.EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut;
                     a.EasingFunction = ease;
                     a.FillBehavior = System.Windows.Media.Animation.FillBehavior.Stop;
-                    sv.SetValue(TargetProperty, target);
-                    sv.BeginAnimation(TargetProperty, a);
+                    // 基础值也设成目标：动画结束（FillBehavior.Stop）时不会回弹到 0
+                    sv.SetValue(OffsetProperty, target);
+                    sv.BeginAnimation(OffsetProperty, a);
                 }
                 catch { }
             };
