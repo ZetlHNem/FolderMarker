@@ -114,6 +114,9 @@ internal static partial class Program
         // 清单表头（文件夹/颜色/缓存图标/目录），切页时逐列淡入
         private Grid tableHeader;
 
+        // 上次扫描时 marked.txt 的签名，用于跳过无变化的重扫
+        private string lastMarksSig;
+
         private readonly DispatcherTimer timer;
         private bool busy;
 
@@ -731,6 +734,10 @@ internal static partial class Program
             {
                 try
                 {
+                    // 记录各分组展开时的高度：收起动画需要「收起前的高度」，
+                    // 而触发器会在 IsExpanded 变化瞬间把高度压成 0，事后就读不到了。
+                    RecordGroupHeights(list);
+
                     // 表头先逐列淡入（4 个列标题依次出现），行再跟上
                     if (tableHeader != null)
                     {
@@ -788,6 +795,28 @@ internal static partial class Program
                 }
                 catch { }
             }), System.Windows.Threading.DispatcherPriority.Loaded);
+        }
+
+        /// <summary>把每个分组的当前展开高度记到 Body.Tag，供收起动画使用</summary>
+        private static void RecordGroupHeights(DependencyObject node)
+        {
+            if (node == null) { return; }
+            try
+            {
+                int n = VisualTreeHelper.GetChildrenCount(node);
+                for (int i = 0; i < n; i++)
+                {
+                    DependencyObject child = VisualTreeHelper.GetChild(node, i);
+                    System.Windows.Controls.Expander ex = child as System.Windows.Controls.Expander;
+                    if (ex != null && ex.IsExpanded)
+                    {
+                        Border b = ex.Template.FindName("Body", ex) as Border;
+                        if (b != null && b.ActualHeight > 1) { b.Tag = b.ActualHeight; }
+                    }
+                    RecordGroupHeights(child);
+                }
+            }
+            catch { }
         }
 
         /// <summary>找到列表内部的 ScrollViewer（诊断用）</summary>
@@ -1009,6 +1038,13 @@ internal static partial class Program
             GroupStyle gs = BuildGroupStyle();
             if (gs != null) { list.GroupStyle.Add(gs); }
             list.SelectionChanged += delegate { UpdateDetail(); };
+
+            // 目录抽屉展开/收起动画：Expander 的这两个是路由事件，
+            // 挂在 list 上一劳永逸 —— 虚拟化下分组容器动态生成也能捕获。
+            list.AddHandler(System.Windows.Controls.Expander.ExpandedEvent,
+                new RoutedEventHandler(OnGroupExpanded));
+            list.AddHandler(System.Windows.Controls.Expander.CollapsedEvent,
+                new RoutedEventHandler(OnGroupCollapsed));
             // 双击一行 → 在资源管理器里打开这个文件夹
             list.MouseDoubleClick += delegate
             {
@@ -1470,11 +1506,15 @@ internal static partial class Program
                     </ControlTemplate>
                   </ToggleButton.Template>
                 </ToggleButton>
-                <ContentPresenter x:Name='ExpandSite' Visibility='Collapsed'/>
+                <!-- 内容区包一层可裁剪的 Border：展开/收起用 Height 动画做抽屉效果。
+                     收起时高度 0（不用 Visibility），这样动画才能从中间值过渡。 -->
+                <Border x:Name='Body' ClipToBounds='True'>
+                  <ContentPresenter x:Name='ExpandSite'/>
+                </Border>
               </StackPanel>
               <ControlTemplate.Triggers>
-                <Trigger Property='IsExpanded' Value='True'>
-                  <Setter TargetName='ExpandSite' Property='Visibility' Value='Visible'/>
+                <Trigger Property='IsExpanded' Value='False'>
+                  <Setter TargetName='Body' Property='Height' Value='0'/>
                 </Trigger>
               </ControlTemplate.Triggers>
             </ControlTemplate>
@@ -1497,6 +1537,69 @@ internal static partial class Program
                 DebugLog("group style: " + ex.Message);
                 return null;
             }
+        }
+
+        /// <summary>目录抽屉展开：高度 0 → 实际高度，缓动展开</summary>
+        private void OnGroupExpanded(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                System.Windows.Controls.Expander ex =
+                    e.OriginalSource as System.Windows.Controls.Expander;
+                if (ex == null) { return; }
+                Border body = ex.Template.FindName("Body", ex) as Border;
+                if (body == null) { return; }
+
+                // 触发器已把 Height 置回 Auto，此时 ActualHeight 是展开后的真实高度
+                double h = body.ActualHeight;
+                if (h <= 0)
+                {
+                    // 布局还没跑，用条目数估算（44px 一行 + 余量）
+                    h = 44.0 * Math.Max(1, CountVisuals(ex, typeof(System.Windows.Controls.ListViewItem))) + 8;
+                }
+                body.Tag = h;
+
+                DoubleAnimation a = new DoubleAnimation(0, h,
+                    System.TimeSpan.FromMilliseconds(220));
+                a.EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut };
+                a.Completed += delegate
+                {
+                    try
+                    {
+                        body.BeginAnimation(FrameworkElement.HeightProperty, null);
+                        body.Height = double.NaN;   // 回到 Auto，窗口缩放也不会被夹住
+                    }
+                    catch { }
+                };
+                body.BeginAnimation(FrameworkElement.HeightProperty, a);
+            }
+            catch { }
+        }
+
+        /// <summary>目录抽屉收起：实际高度 → 0</summary>
+        private void OnGroupCollapsed(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                System.Windows.Controls.Expander ex =
+                    e.OriginalSource as System.Windows.Controls.Expander;
+                if (ex == null) { return; }
+                Border body = ex.Template.FindName("Body", ex) as Border;
+                if (body == null) { return; }
+
+                double h = body.ActualHeight;
+                if (h <= 0 && body.Tag is double && (double)body.Tag > 0)
+                {
+                    h = (double)body.Tag;       // 触发器可能已把高度压成 0，用上次记录的值
+                }
+                if (h <= 0) { return; }
+
+                DoubleAnimation a = new DoubleAnimation(h, 0,
+                    System.TimeSpan.FromMilliseconds(170));
+                a.EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut };
+                body.BeginAnimation(FrameworkElement.HeightProperty, a);
+            }
+            catch { }
         }
 
         /// <summary>把清单里所有目录抽屉展开（分组容器可能还没生成，遍历到的才设置）</summary>
@@ -1575,7 +1678,8 @@ internal static partial class Program
 
             Button bReload = MakeButton("WinSubtleButton", "刷新");
             bReload.Margin = new Thickness(0, 0, 10, 0);
-            bReload.Click += delegate { ReloadMarks(); };
+            // 手动刷新：清掉签名强制重扫（比如在别处标了文件夹想立刻看到）
+            bReload.Click += delegate { lastMarksSig = null; ReloadMarks(); AnimateVisibleRows(); };
             right.Children.Add(bReload);
 
             colorBox = new ComboBox();
@@ -1614,9 +1718,34 @@ internal static partial class Program
         }
 
         // ---------------- 数据加载 ----------------
+        /// <summary>
+        /// 标记清单的「签名」：文件修改时间 + 长度。用来判断切 tab 时要不要重新扫描。
+        /// 每个条目要读 desktop.ini、查缓存 ico、查目录是否存在（3+ 次磁盘 IO），
+        /// 几百项时一次重扫就是几百次 IO —— 这正是「切到清单卡一下」的来源。
+        /// </summary>
+        private static string MarksSignature()
+        {
+            try
+            {
+                string p = Io(MarkedListPath());
+                if (!File.Exists(p)) { return "none"; }
+                FileInfo fi = new FileInfo(p);
+                return fi.LastWriteTimeUtc.Ticks.ToString() + ":" + fi.Length.ToString();
+            }
+            catch { return null; }
+        }
+
         private void ReloadMarks()
         {
             if (list == null) { return; }
+
+            // 清单文件没变 → 直接用上次的结果，跳过逐条磁盘扫描
+            string sig = MarksSignature();
+            if (sig != null && sig == lastMarksSig && allRows.Count > 0)
+            {
+                ApplyFilter();
+                return;
+            }
 
             allRows.Clear();
             foreach (string line in ReadMarked())
@@ -1625,8 +1754,8 @@ internal static partial class Program
                 if (f.Length == 0) { continue; }
 
                 string ini = System.IO.Path.Combine(Io(f), "desktop.ini");
-                string colorName, cache;
-                string colorTitle = Describe(ini, out colorName, out cache);
+                string colorName, cache, cacheIcon;
+                string colorTitle = Describe(ini, out colorName, out cache, out cacheIcon);
 
                 MarkRow r = new MarkRow();
                 r.Path = f;
@@ -1652,11 +1781,11 @@ internal static partial class Program
                 r.Dot = DotBrush(colorName);
 
                 // 详情条预览用：缓存 ico 优先，没有就退回安装包里的纯色 ico
-                string iconName, colorIgnored;
+                // （cacheIcon 由 Describe 顺带返回，不再重复读 ini）
                 string iconPath = null;
-                if (TryReadCacheMark(ini, out iconName, out colorIgnored))
+                if (!string.IsNullOrEmpty(cacheIcon))
                 {
-                    string cp = System.IO.Path.Combine(CacheIconDir(), iconName);
+                    string cp = System.IO.Path.Combine(CacheIconDir(), cacheIcon);
                     if (File.Exists(Io(cp))) { iconPath = cp; }
                 }
                 if (iconPath == null && !string.IsNullOrEmpty(colorName))
@@ -1669,18 +1798,26 @@ internal static partial class Program
                 allRows.Add(r);
             }
 
+            lastMarksSig = sig;
             ApplyFilter();
         }
 
-        private static string Describe(string ini, out string colorName, out string cacheText)
+        /// <summary>
+        /// 解析 desktop.ini 的颜色与缓存状态。顺带把缓存图标名也带出来 ——
+        /// 调用方原本要再调一次 TryReadCacheMark 读同一个 ini，等于每条目多一次磁盘 IO。
+        /// </summary>
+        private static string Describe(string ini, out string colorName, out string cacheText,
+            out string cacheIconName)
         {
             colorName = null;
             cacheText = "—";
+            cacheIconName = null;
 
             string iconName, color;
             if (TryReadCacheMark(ini, out iconName, out color))
             {
                 colorName = color;
+                cacheIconName = iconName;
                 string p = System.IO.Path.Combine(CacheIconDir(), iconName);
                 cacheText = File.Exists(Io(p)) ? "正常" : "缺失（会自动补）";
                 return ColorTitle(color);
