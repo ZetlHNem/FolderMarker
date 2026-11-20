@@ -41,6 +41,12 @@ internal static partial class Program
                 wc.Headers.Add("User-Agent", "FolderMarker-Updater");
                 wc.Headers.Add("Accept", "application/vnd.github+json");
                 string json = wc.DownloadString(LatestApi);
+                // GitHub 限流/被拒时返回的是 HTML 错误页而不是 JSON，提前识别给友好提示
+                if (string.IsNullOrEmpty(json) || json.IndexOf("\"tag_name\"", StringComparison.Ordinal) < 0)
+                {
+                    info.Error = "GitHub 暂时拒绝了检查请求（请稍后再试）";
+                    return info;
+                }
                 info.Version = ExtractJsonString(json, "tag_name");
                 info.DownloadUrl = ExtractExeAssetUrl(json);
                 if (string.IsNullOrEmpty(info.Version) || string.IsNullOrEmpty(info.DownloadUrl))
