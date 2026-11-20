@@ -13,6 +13,7 @@ internal static partial class Program
 {
     private const string UpdateRepo = "ZetlHNem/FolderMarker";
     private const string LatestApi = "https://api.github.com/repos/" + UpdateRepo + "/releases/latest";
+    private const string LatestPage = "https://github.com/" + UpdateRepo + "/releases/latest";
 
     /// <summary>GitHub 上最新版本的检查结果</summary>
     internal sealed class UpdateInfo
@@ -24,8 +25,11 @@ internal static partial class Program
     }
 
     /// <summary>
-    /// 调 GitHub releases/latest，拿到最新 tag 和第一个 .exe 附件的下载链接。
-    /// 用 WebClient + User-Agent（GitHub 对无 UA 的请求返回 403）。
+    /// 拿最新版本号 + 安装包直链。
+    /// 主通道走 github.com 的 /releases/latest —— 它返回 302，Location 里带 tag，
+    /// 不算 API 额度、几乎不会被限流（api.github.com 匿名额度很容易被耗尽，实测会 403）。
+    /// 备用通道才用 api.github.com 解析 JSON。
+    /// 安装包链接按本项目固定命名拼：releases/download/&lt;tag&gt;/FolderMarker-setup-&lt;tag&gt;.exe。
     /// </summary>
     private static UpdateInfo CheckLatestVersion()
     {
@@ -35,16 +39,25 @@ internal static partial class Program
             ServicePointManager.SecurityProtocol =
                 SecurityProtocolType.Tls12 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls;
 
+            // 主通道：github.com 302 重定向，免额度
+            string tag = TagFromRedirect(LatestPage);
+            if (!string.IsNullOrEmpty(tag))
+            {
+                info.Version = tag;
+                info.DownloadUrl = SetupUrlFor(tag);
+                return info;
+            }
+
+            // 备用通道：api.github.com JSON（可能被限流）
             using (WebClient wc = new WebClient())
             {
                 wc.Encoding = Encoding.UTF8;
                 wc.Headers.Add("User-Agent", "FolderMarker-Updater");
                 wc.Headers.Add("Accept", "application/vnd.github+json");
                 string json = wc.DownloadString(LatestApi);
-                // GitHub 限流/被拒时返回的是 HTML 错误页而不是 JSON，提前识别给友好提示
                 if (string.IsNullOrEmpty(json) || json.IndexOf("\"tag_name\"", StringComparison.Ordinal) < 0)
                 {
-                    info.Error = "GitHub 暂时拒绝了检查请求（请稍后再试）";
+                    info.Error = "无法连接 GitHub 检查更新，请检查网络后重试";
                     return info;
                 }
                 info.Version = ExtractJsonString(json, "tag_name");
@@ -60,6 +73,54 @@ internal static partial class Program
             info.Error = ShortNetError(ex);
         }
         return info;
+    }
+
+    /// <summary>
+    /// 请求 github.com/.../releases/latest，用 AllowAutoRedirect=false 接 302，
+    /// 从 Location 头里抠出 /tag/vX.Y.Z。不消耗 API 额度。
+    /// </summary>
+    private static string TagFromRedirect(string url)
+    {
+        try
+        {
+            HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
+            req.AllowAutoRedirect = false;
+            req.UserAgent = "FolderMarker-Updater";
+            req.Timeout = 20000;
+            req.ReadWriteTimeout = 20000;
+            string location = null;
+            try
+            {
+                using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
+                {
+                    location = resp.Headers["Location"];
+                }
+            }
+            catch (WebException we)
+            {
+                // 302 在 .NET 里当异常处理（关了自动重定向时），从响应头拿 Location
+                HttpWebResponse resp = we.Response as HttpWebResponse;
+                if (resp != null) { location = resp.Headers["Location"]; }
+            }
+            return TagFromLocation(location);
+        }
+        catch { return null; }
+    }
+
+    /// <summary>从 302 的 Location 里抠出 vX.Y.Z（纯函数，便于自检离线验证）</summary>
+    private static string TagFromLocation(string location)
+    {
+        if (string.IsNullOrEmpty(location)) { return null; }
+        Match m = Regex.Match(location, @"/releases/tag/(v\d+\.\d+\.\d+)");
+        return m.Success ? m.Groups[1].Value : null;
+    }
+
+    /// <summary>按固定命名拼安装包直链</summary>
+    private static string SetupUrlFor(string tag)
+    {
+        if (string.IsNullOrEmpty(tag)) { return null; }
+        return string.Format("https://github.com/{0}/releases/download/{1}/FolderMarker-setup-{1}.exe",
+            UpdateRepo, tag);
     }
 
     /// <summary>apk 版本号是否有更新：v2.3.9 比 2.3.8 新则为 true</summary>
