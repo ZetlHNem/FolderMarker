@@ -88,6 +88,10 @@ internal static partial class Program
                 catch { }
             };
 
+            // 托盘常驻时自动检查更新（不开管理台也会提示）：
+            // 启动 30 秒后查一次，之后每 4 小时一次；受 AutoUpdate 开关控制。
+            StartTrayUpdateCheck(ni, host);
+
             WF.Application.Run(host);
             return 0;
         }
@@ -102,6 +106,88 @@ internal static partial class Program
             try { m.ReleaseMutex(); } catch { }
             m.Dispose();
         }
+    }
+
+    /// <summary>
+    /// 托盘常驻的自动更新检查：启动 30 秒后一次，之后每 4 小时一次。
+    /// 不打开管理台也能收到新版本提示，是「不打开管理页就不更新」的正确落点
+    /// （托盘进程一直常驻，而管理台窗口只有用户主动打开才存在）。
+    /// </summary>
+    private static void StartTrayUpdateCheck(WF.NotifyIcon ni, WF.Form host)
+    {
+        try
+        {
+            WF.Timer timer = new WF.Timer();
+            timer.Interval = 30 * 1000;              // 启动后 30 秒首次检查
+            int ticks = 0;
+            System.DateTime lastCheck = System.DateTime.MinValue;
+            timer.Tick += delegate
+            {
+                // 首次之后改成每 4 小时（30 秒那次之后重置间隔）
+                ticks++;
+                if (ticks == 1)
+                {
+                    timer.Interval = 4 * 60 * 60 * 1000;
+                }
+                if (GetSettingInt("AutoUpdate", 1) == 0) { return; }
+                // 避免重复：每 4 小时内只弹一次
+                if ((System.DateTime.Now - lastCheck).TotalHours < 3.9) { return; }
+                lastCheck = System.DateTime.Now;
+
+                System.Threading.Thread t = new System.Threading.Thread(delegate()
+                {
+                    UpdateInfo info = CheckLatestVersion();
+                    if (!info.Ok || !IsNewerVersion(info.Version, AppVersion)) { return; }
+                    // ShowBalloonTip 必须在 UI 线程调用，否则抛 InvalidOperationException 气泡不显示
+                    try
+                    {
+                        host.BeginInvoke(new Action(delegate()
+                        {
+                            ni.BalloonTipClicked -= OnBalloonClicked;
+                            ni.BalloonTipClicked += OnBalloonClicked;
+                            ni.Tag = info;
+                            ni.ShowBalloonTip(8000, "文件夹标记",
+                                "发现新版本 " + info.Version + "，点击这里下载更新", WF.ToolTipIcon.Info);
+                        }));
+                    }
+                    catch { }
+                });
+                t.IsBackground = true;
+                t.Start();
+            };
+            timer.Start();
+        }
+        catch { }
+    }
+
+    /// <summary>托盘气泡被点击：确认后下载并静默安装</summary>
+    private static void OnBalloonClicked(object sender, System.EventArgs e)
+    {
+        WF.NotifyIcon ni = sender as WF.NotifyIcon;
+        UpdateInfo info = ni != null ? ni.Tag as UpdateInfo : null;
+        if (info == null) { return; }
+        try
+        {
+            string msg = "发现新版本 " + info.Version + "（当前 " + AppVersion + "）。\r\n\r\n立即下载并更新？";
+            if (WF.MessageBox.Show(msg, "文件夹标记 - 有可用更新",
+                    WF.MessageBoxButtons.YesNo, WF.MessageBoxIcon.Question,
+                    WF.MessageBoxDefaultButton.Button1) != WF.DialogResult.Yes)
+            { return; }
+
+            System.Threading.Thread t = new System.Threading.Thread(delegate()
+            {
+                string err = DownloadAndInstall(info);
+                if (err != null)
+                {
+                    WF.MessageBox.Show("更新失败：" + err, "文件夹标记",
+                        WF.MessageBoxButtons.OK, WF.MessageBoxIcon.Warning);
+                }
+                // 成功时安装器接管（静默安装会替换 exe 并重启托盘）
+            });
+            t.IsBackground = true;
+            t.Start();
+        }
+        catch { }
     }
 
     // ---------------- 托盘菜单（Win32 原生，跟随系统样式）----------------
