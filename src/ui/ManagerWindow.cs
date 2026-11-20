@@ -59,6 +59,7 @@ internal static partial class Program
         // ---------------- 框架控件 ----------------
         private readonly List<Border> navItems = new List<Border>();
         private readonly List<Border> navBars = new List<Border>();
+        private readonly List<Border> navHovers = new List<Border>();
         private readonly List<TextBlock> navIcons = new List<TextBlock>();
         private readonly List<TextBlock> navTexts = new List<TextBlock>();
         private readonly List<Panel> pages = new List<Panel>();
@@ -162,7 +163,9 @@ internal static partial class Program
             FontFamily = new FontFamily(WinUi.FontUi);
             FontSize = WinUi.SizeBody;
             UseLayoutRounding = true;
-            TextOptions.SetTextFormattingMode(this, TextFormattingMode.Ideal);
+            // Display 模式按整数像素对齐字形，比 Ideal 快很多（大量文本/滚动时尤其明显），
+            // 代价是高 DPI 下字距略有差异，UI 文本完全可接受。
+            TextOptions.SetTextFormattingMode(this, TextFormattingMode.Display);
             TextOptions.SetTextRenderingMode(this, TextRenderingMode.ClearType);
 
             if (WinUi.Res.Count > 0) { Resources.MergedDictionaries.Add(WinUi.Res); }
@@ -288,6 +291,9 @@ internal static partial class Program
 
             // 窗口打开动效：轻微放大淡入
             Loaded += delegate { WinMotion.WindowOpen(this); };
+
+            // 全窗口平滑滚动（列表/日志/设置页等所有滚动区域自动生效）
+            SmoothScroll.Enable(this);
 
             // 启动自动检查更新：开相关设置且在 UI 空闲时才跑，失败静默
             if (Program.GetSettingInt("AutoUpdate", 1) != 0)
@@ -623,6 +629,15 @@ internal static partial class Program
             bg.Background = Brushes.Transparent;
             g.Children.Add(bg);
 
+            // hover 底色单独一层，用透明度做过渡（直接改 bg.Background 是硬切）
+            Border hv = new Border();
+            hv.CornerRadius = new CornerRadius(4);
+            hv.Background = WinUi.B("RowHover");
+            hv.Opacity = 0;
+            hv.IsHitTestVisible = false;
+            g.Children.Add(hv);
+            navHovers.Add(hv);
+
             Border bar = new Border();
             bar.Width = 3;
             bar.Height = 16;
@@ -655,11 +670,12 @@ internal static partial class Program
 
             item.MouseEnter += delegate
             {
-                if (navBars[index].Opacity < 1) { bg.Background = WinUi.B("RowHover"); }
+                // 选中项不加 hover 底色（否则和选中色叠在一起发脏）
+                if (navBars[index].Opacity < 1) { AnimateOpacity(hv, 1, 120); }
             };
             item.MouseLeave += delegate
             {
-                if (navBars[index].Opacity < 1) { bg.Background = Brushes.Transparent; }
+                AnimateOpacity(hv, 0, 180);
             };
             item.MouseLeftButtonUp += delegate { SelectNavPages(index); };
 
@@ -687,6 +703,8 @@ internal static partial class Program
                 if (bg != null) { bg.Background = on ? WinUi.B("NavSelected") : Brushes.Transparent; }
                 // 导航指示条：淡入淡出过渡，不再是硬切换
                 AnimateOpacity(navBars[k], on ? 1 : 0, 160);
+                // 选中项清掉残留 hover 底色，避免和选中色叠加发脏
+                if (on && k < navHovers.Count) { AnimateOpacity(navHovers[k], 0, 120); }
                 navIcons[k].Foreground = on ? WinUi.B("TextPrimary") : WinUi.B("TextSecondary");
                 navTexts[k].Foreground = on ? WinUi.B("TextPrimary") : WinUi.B("TextSecondary");
                 navTexts[k].FontWeight = on ? FontWeights.SemiBold : FontWeights.Normal;
@@ -697,6 +715,20 @@ internal static partial class Program
             WinMotion.FadeIn(pageTitle, 180);
             pageTitle.Text = Titles[index];
             pageSub.Text = Subs[index];
+        }
+
+        /// <summary>诊断用：清单条目数 vs 实际实例化的行容器数（验证虚拟化是否生效）</summary>
+        internal string ProbeListStats()
+        {
+            try
+            {
+                int total = list.Items.Count;
+                int realized = CountVisuals(list, typeof(System.Windows.Controls.ListViewItem));
+                bool ok = total > 12 && realized > 0 && realized < total / 2;
+                return "总条目 " + total + "，已实例化行容器 " + realized +
+                       (ok ? "  → 虚拟化生效" : (total <= 12 ? "  → 条目太少，无法判断" : "  → 虚拟化未生效"));
+            }
+            catch (Exception ex) { return "统计失败: " + ex.Message; }
         }
 
         /// <summary>把元素的 Opacity 平滑过渡到目标值</summary>
@@ -832,9 +864,15 @@ internal static partial class Program
             list.SelectionMode = SelectionMode.Extended;
             Style lvStyle = WinUi.S("WinListView");
             if (lvStyle != null) { list.Style = lvStyle; }
-            // 分组 + 虚拟化默认不共存（IsVirtualizingWhenGrouping=False 会导致组内行不实例化），
-            // 清单量级很小，直接关掉虚拟化最稳。
-            VirtualizingPanel.SetIsVirtualizing(list, false);
+            // 开启回收式虚拟化：清单几百项时只实例化可见行，滚动才不卡。
+            // 分组场景必须显式打开 IsVirtualizingWhenGrouping，否则组内行不实例化（白屏）。
+            // Recycling 模式复用容器，比 Standard 少大量 GC 与模板展开。
+            VirtualizingPanel.SetIsVirtualizing(list, true);
+            VirtualizingPanel.SetVirtualizationMode(list, VirtualizationMode.Recycling);
+            VirtualizingPanel.SetIsVirtualizingWhenGrouping(list, true);
+            VirtualizingPanel.SetCacheLength(list, new VirtualizationCacheLength(1, 1));
+            VirtualizingPanel.SetCacheLengthUnit(list, VirtualizationCacheLengthUnit.Page);
+            ScrollViewer.SetCanContentScroll(list, true);
             list.ItemTemplate = BuildRowTemplate();
             GroupStyle gs = BuildGroupStyle();
             if (gs != null) { list.GroupStyle.Add(gs); }
