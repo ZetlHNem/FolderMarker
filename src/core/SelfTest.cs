@@ -472,7 +472,9 @@ internal static partial class Program
         check("版本比较-当前版不更新", !IsNewerVersion("v2.3.8", "2.3.8"));
         check("版本比较-旧版不更新", !IsNewerVersion("v2.3.7", "2.3.8"));
         check("版本比较-跨大版本", IsNewerVersion("v3.0.0", "2.9.9"));
-        string fakeJson = "{\"tag_name\":\"v2.4.0\",\"assets\":[{\"name\":\"setup.exe\",\"browser_download_url\":\"https://x/setup.exe\"}]}";
+        // 用「带 uploader 嵌套对象」的真实结构，覆盖曾经的 bug：
+        // asset 内嵌 uploader:{...} 时，旧正则 \{[^{}]*\} 匹配不到，导致检查失败
+        string fakeJson = "{\"tag_name\":\"v2.4.0\",\"assets\":[{\"name\":\"setup.exe\",\"browser_download_url\":\"https://x/setup.exe\",\"uploader\":{\"login\":\"u\",\"id\":1}}]}";
         check("更新JSON-版本号解析", ExtractJsonString(fakeJson, "tag_name") == "v2.4.0");
         check("更新JSON-下载链接解析", ExtractExeAssetUrl(fakeJson) == "https://x/setup.exe");
 
