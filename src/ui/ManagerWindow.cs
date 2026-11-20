@@ -111,6 +111,9 @@ internal static partial class Program
         // 关于页
         private TextBlock aboutStats;
 
+        // 清单表头（文件夹/颜色/缓存图标/目录），切页时逐列淡入
+        private Grid tableHeader;
+
         private readonly DispatcherTimer timer;
         private bool busy;
 
@@ -686,7 +689,7 @@ internal static partial class Program
         private void SelectNavPages(int index)
         {
             SelectNav(index);
-            if (index == 0) { ReloadMarks(); }
+            if (index == 0) { ReloadMarks(); AnimateVisibleRows(); }
             else if (index == 1) { UpdateWatchStatus(); }
             else if (index == 2) { ReloadRoots(); }
             else if (index == 3) { ReloadLog(); }
@@ -717,6 +720,116 @@ internal static partial class Program
             pageSub.Text = Subs[index];
         }
 
+        /// <summary>
+        /// 清单可见行做「逐条滑入」：切到清单页 / 刷新时，行依次淡入并轻微上移。
+        /// 只处理已实例化的行（虚拟化下约十几行）；基础值先设成最终值，
+        /// 动画只负责过渡 —— 这样回收容器被复用时不会残留「半透明/偏移」的错误状态。
+        /// </summary>
+        private void AnimateVisibleRows()
+        {
+            Dispatcher.BeginInvoke(new Action(delegate
+            {
+                try
+                {
+                    // 表头先逐列淡入（4 个列标题依次出现），行再跟上
+                    if (tableHeader != null)
+                    {
+                        for (int c = 0; c < tableHeader.Children.Count; c++)
+                        {
+                            UIElement cell = tableHeader.Children[c] as UIElement;
+                            if (cell == null) { continue; }
+                            System.Windows.Media.TranslateTransform ct =
+                                new System.Windows.Media.TranslateTransform(0, 0);
+                            cell.RenderTransform = ct;
+                            cell.Opacity = 1;
+
+                            System.TimeSpan cd = System.TimeSpan.FromMilliseconds(c * 45);
+                            DoubleAnimation cf = new DoubleAnimation(0, 1,
+                                System.TimeSpan.FromMilliseconds(160));
+                            cf.BeginTime = cd;
+                            cf.EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut };
+                            cell.BeginAnimation(UIElement.OpacityProperty, cf);
+
+                            DoubleAnimation cm = new DoubleAnimation(6, 0,
+                                System.TimeSpan.FromMilliseconds(180));
+                            cm.BeginTime = cd;
+                            cm.EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut };
+                            ct.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, cm);
+                        }
+                    }
+
+                    List<System.Windows.Controls.ListViewItem> rows =
+                        new List<System.Windows.Controls.ListViewItem>();
+                    CollectRows(list, rows, 18);
+                    int n = rows.Count;
+                    for (int i = 0; i < n; i++)
+                    {
+                        System.Windows.Controls.ListViewItem it = rows[i];
+                        System.Windows.Media.TranslateTransform tt =
+                            new System.Windows.Media.TranslateTransform(0, 0);
+                        it.RenderTransform = tt;
+                        it.Opacity = 1;   // 基础值 = 最终值
+
+                        // 表头先铺开（约 180ms），行再逐条跟上
+                        System.TimeSpan delay = System.TimeSpan.FromMilliseconds(170 + i * 22);
+
+                        DoubleAnimation fade = new DoubleAnimation(0, 1,
+                            System.TimeSpan.FromMilliseconds(170));
+                        fade.BeginTime = delay;
+                        fade.EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut };
+                        it.BeginAnimation(UIElement.OpacityProperty, fade);
+
+                        DoubleAnimation move = new DoubleAnimation(9, 0,
+                            System.TimeSpan.FromMilliseconds(190));
+                        move.BeginTime = delay;
+                        move.EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut };
+                        tt.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, move);
+                    }
+                }
+                catch { }
+            }), System.Windows.Threading.DispatcherPriority.Loaded);
+        }
+
+        /// <summary>找到列表内部的 ScrollViewer（诊断用）</summary>
+        private static ScrollViewer FindInnerScroll(DependencyObject root)
+        {
+            if (root == null) { return null; }
+            try
+            {
+                int count = System.Windows.Media.VisualTreeHelper.GetChildrenCount(root);
+                for (int i = 0; i < count; i++)
+                {
+                    DependencyObject child = System.Windows.Media.VisualTreeHelper.GetChild(root, i);
+                    ScrollViewer sv = child as ScrollViewer;
+                    if (sv != null) { return sv; }
+                    ScrollViewer deep = FindInnerScroll(child);
+                    if (deep != null) { return deep; }
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        /// <summary>按视觉顺序收集已实例化的行容器（虚拟化下只会有可见的那几行）</summary>
+        private static void CollectRows(DependencyObject root,
+            List<System.Windows.Controls.ListViewItem> into, int max)
+        {
+            if (root == null || into.Count >= max) { return; }
+            try
+            {
+                int count = System.Windows.Media.VisualTreeHelper.GetChildrenCount(root);
+                for (int i = 0; i < count && into.Count < max; i++)
+                {
+                    DependencyObject child = System.Windows.Media.VisualTreeHelper.GetChild(root, i);
+                    System.Windows.Controls.ListViewItem item =
+                        child as System.Windows.Controls.ListViewItem;
+                    if (item != null) { into.Add(item); }
+                    CollectRows(child, into, max);
+                }
+            }
+            catch { }
+        }
+
         /// <summary>诊断用：清单条目数 vs 实际实例化的行容器数（验证虚拟化是否生效）</summary>
         internal string ProbeListStats()
         {
@@ -725,8 +838,24 @@ internal static partial class Program
                 int total = list.Items.Count;
                 int realized = CountVisuals(list, typeof(System.Windows.Controls.ListViewItem));
                 bool ok = total > 12 && realized > 0 && realized < total / 2;
+
+                // 像素滚动验证：ScrollableHeight 若远大于条目数，说明按像素而非按项
+                string unit = "?";
+                try
+                {
+                    ScrollUnit su = VirtualizingPanel.GetScrollUnit(list);
+                    ScrollViewer inner = FindInnerScroll(list);
+                    unit = su.ToString() +
+                        (inner != null
+                            ? "，可滚 " + Math.Round(inner.ScrollableHeight) + "px，视口 "
+                              + Math.Round(inner.ViewportHeight) + "px"
+                            : "，未找到内部 ScrollViewer");
+                }
+                catch { }
+
                 return "总条目 " + total + "，已实例化行容器 " + realized +
-                       (ok ? "  → 虚拟化生效" : (total <= 12 ? "  → 条目太少，无法判断" : "  → 虚拟化未生效"));
+                       (ok ? "  → 虚拟化生效" : (total <= 12 ? "  → 条目太少" : "  → 虚拟化未生效")) +
+                       "；滚动单位 " + unit;
             }
             catch (Exception ex) { return "统计失败: " + ex.Message; }
         }
@@ -873,6 +1002,9 @@ internal static partial class Program
             VirtualizingPanel.SetCacheLength(list, new VirtualizationCacheLength(1, 1));
             VirtualizingPanel.SetCacheLengthUnit(list, VirtualizationCacheLengthUnit.Page);
             ScrollViewer.SetCanContentScroll(list, true);
+            // 像素级滚动：既保留虚拟化（CanContentScroll=true），又让滚动是连续的像素移动。
+            // 默认的「按项」滚动是离散的，配平滑动画会一顿一顿。
+            VirtualizingPanel.SetScrollUnit(list, ScrollUnit.Pixel);
             list.ItemTemplate = BuildRowTemplate();
             GroupStyle gs = BuildGroupStyle();
             if (gs != null) { list.GroupStyle.Add(gs); }
@@ -1210,6 +1342,7 @@ internal static partial class Program
         {
             Grid h = new Grid();
             h.Margin = new Thickness(16, 0, 16, 0);
+            tableHeader = h;
 
             ColumnDefinition c0 = new ColumnDefinition();
             c0.Width = new GridLength(1, GridUnitType.Star);
