@@ -4,7 +4,7 @@
 
 # 文件夹标记 · FolderMarker
 
-![version](https://img.shields.io/badge/version-2.4.6-blue)
+![version](https://img.shields.io/badge/version-2.4.7-blue)
 ![platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D6)
 ![.NET](https://img.shields.io/badge/.NET-Framework%204.6.2%2B-512BD4)
 ![build](https://img.shields.io/badge/build-one--click-brightgreen)
@@ -30,7 +30,7 @@
 
 ## 安装
 
-双击 `dist\FolderMarker-setup-v2.4.6.exe`，标准中文向导。安装时会弹一次 UAC（写受信任根证书 + 注册应用包），点「是」即可。
+双击 `dist\FolderMarker-setup-v2.4.7.exe`，标准中文向导。安装时会弹一次 UAC（写受信任根证书 + 注册应用包），点「是」即可。
 安装位置：`%LOCALAPPDATA%\FolderMarker`；在「设置 → 应用 → 已安装的应用」里卸载。
 
 ## 使用
@@ -75,7 +75,7 @@ powershell -ExecutionPolicy Bypass -File .\build_all.ps1
 2. 编译 `build\FolderMarker.exe`（348 KB），并把 `icons\` 复制到 `build\`
 3. 跑 `selftest`，标准结果 **39 通过 / 0 失败**
 4. 编译原生 COM DLL、嵌入清单、打包签名 `dist\FolderMarkerShell.msix`（约 212 KB）
-5. 检测到 Inno Setup 7 时，自动打 `dist\FolderMarker-setup-v2.4.6.exe`（约 2.9 MB）；没装则跳过安装包，其余照常完成
+5. 检测到 Inno Setup 7 时，自动打 `dist\FolderMarker-setup-v2.4.7.exe`（约 2.9 MB）；没装则跳过安装包，其余照常完成
 
 **前置条件**：Windows + 系统自带 .NET Framework 4.6.2+（无需 Visual Studio / .NET SDK）。
 Inno Setup 7 只影响最后的安装包步骤，不装也能生成 EXE 和 MSIX。
