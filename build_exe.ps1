@@ -23,6 +23,7 @@ $srcs   = @(
     (Join-Path $root "src\core\Mark.cs"),
     (Join-Path $root "src\core\Ico.cs"),
     (Join-Path $root "src\core\Native.cs"),
+    (Join-Path $root "src\core\Update.cs"),
     (Join-Path $root "src\ui\WinUi.cs"),
     (Join-Path $root "src\ui\ManagerWindow.cs"),
     (Join-Path $root "src\ui\Watch.cs"),
