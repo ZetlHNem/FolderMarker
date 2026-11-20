@@ -149,6 +149,10 @@ internal static partial class Program
             case "diagnose":
                 return RunDiagnose(args.Length > 1 ? args[1] : null);
 
+            // UI 冒烟测试：把管理台渲染成 PNG，检查模板/布局是否正常
+            case "uiprobe":
+                return RunUiProbe(args);
+
             // 回归自检
             case "selftest":
                 return RunSelfTest();
