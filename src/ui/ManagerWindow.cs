@@ -117,6 +117,13 @@ internal static partial class Program
         // 上次扫描时 marked.txt 的签名，用于跳过无变化的重扫
         private string lastMarksSig;
 
+        // 用户手动收起的目录分组（按分组名，即上级目录全路径）。
+        // 容器重建后要据此恢复，否则切 tab 会把收起的组重新张开。
+        private readonly Dictionary<string, bool> collapsedGroups = new Dictionary<string, bool>();
+
+        // 恢复收起状态时不播动画（避免列表刚出来就一堆抽屉在动）
+        private bool suppressGroupAnim;
+
         private readonly DispatcherTimer timer;
         private bool busy;
 
@@ -692,7 +699,7 @@ internal static partial class Program
         private void SelectNavPages(int index)
         {
             SelectNav(index);
-            if (index == 0) { ReloadMarks(); AnimateVisibleRows(); }
+            if (index == 0) { ReloadMarks(); AnimateVisibleRows(); RestoreCollapsedGroupsSoon(); }
             else if (index == 1) { UpdateWatchStatus(); }
             else if (index == 2) { ReloadRoots(); }
             else if (index == 3) { ReloadLog(); }
@@ -734,10 +741,6 @@ internal static partial class Program
             {
                 try
                 {
-                    // 记录各分组展开时的高度：收起动画需要「收起前的高度」，
-                    // 而触发器会在 IsExpanded 变化瞬间把高度压成 0，事后就读不到了。
-                    RecordGroupHeights(list);
-
                     // 表头先逐列淡入（4 个列标题依次出现），行再跟上
                     if (tableHeader != null)
                     {
@@ -797,28 +800,6 @@ internal static partial class Program
             }), System.Windows.Threading.DispatcherPriority.Loaded);
         }
 
-        /// <summary>把每个分组的当前展开高度记到 Body.Tag，供收起动画使用</summary>
-        private static void RecordGroupHeights(DependencyObject node)
-        {
-            if (node == null) { return; }
-            try
-            {
-                int n = VisualTreeHelper.GetChildrenCount(node);
-                for (int i = 0; i < n; i++)
-                {
-                    DependencyObject child = VisualTreeHelper.GetChild(node, i);
-                    System.Windows.Controls.Expander ex = child as System.Windows.Controls.Expander;
-                    if (ex != null && ex.IsExpanded)
-                    {
-                        Border b = ex.Template.FindName("Body", ex) as Border;
-                        if (b != null && b.ActualHeight > 1) { b.Tag = b.ActualHeight; }
-                    }
-                    RecordGroupHeights(child);
-                }
-            }
-            catch { }
-        }
-
         /// <summary>找到列表内部的 ScrollViewer（诊断用）</summary>
         private static ScrollViewer FindInnerScroll(DependencyObject root)
         {
@@ -857,6 +838,47 @@ internal static partial class Program
                 }
             }
             catch { }
+        }
+
+        /// <summary>诊断用：切换导航页（uiprobe 验证「切 tab 后分组收起状态是否保持」）</summary>
+        internal void ProbeSwitchTab(int index) { SelectNavPages(index); }
+
+        /// <summary>诊断用：模拟用户收起第一个分组（会写入收起记录，和真实点击效果一致）</summary>
+        internal string ProbeCollapseFirstGroup()
+        {
+            System.Windows.Controls.Expander ex = FindFirstExpanderIn(list);
+            if (ex == null) { return "未找到分组"; }
+            string key = GroupKey(ex);
+            if (key != null) { collapsedGroups[key] = true; }
+            ex.IsExpanded = false;
+            return "已收起 " + (key ?? "?");
+        }
+
+        /// <summary>诊断用：收起记录的组名与当前第一个分组的 key</summary>
+        internal string ProbeCollapsedInfo()
+        {
+            string s = "收起记录 " + collapsedGroups.Count + " 组";
+            foreach (string k in collapsedGroups.Keys) { s += " [" + k + "]"; }
+            try
+            {
+                System.Windows.Controls.Expander ex = FindFirstExpanderIn(list);
+                if (ex != null)
+                {
+                    s += "；首组 key=" + (GroupKey(ex) ?? "null") +
+                         "，IsExpanded=" + ex.IsExpanded;
+                }
+            }
+            catch { }
+            s += "；恢复: " + (lastRestoreInfo ?? "(从未执行)");
+            return s;
+        }
+
+        private static System.Windows.Controls.Expander FindFirstExpanderIn(DependencyObject root)
+        {
+            List<System.Windows.Controls.Expander> all =
+                new List<System.Windows.Controls.Expander>();
+            CollectExpanders(root, all, 1);
+            return all.Count > 0 ? all[0] : null;
         }
 
         /// <summary>诊断用：清单条目数 vs 实际实例化的行容器数（验证虚拟化是否生效）</summary>
@@ -1045,6 +1067,12 @@ internal static partial class Program
                 new RoutedEventHandler(OnGroupExpanded));
             list.AddHandler(System.Windows.Controls.Expander.CollapsedEvent,
                 new RoutedEventHandler(OnGroupCollapsed));
+            // 注意：Loaded 是 Direct 路由事件、不冒泡，挂在这里收不到子元素的 Loaded。
+            // 收起状态改为在列表重建后主动遍历恢复（见 RestoreCollapsedGroups）。
+
+            // 用户点击组头时记录收起状态（ButtonBase.Click 是冒泡事件，能覆盖动态生成的分组）
+            list.AddHandler(System.Windows.Controls.Primitives.ButtonBase.ClickEvent,
+                new RoutedEventHandler(OnGroupHeadClick));
             // 双击一行 → 在资源管理器里打开这个文件夹
             list.MouseDoubleClick += delegate
             {
@@ -1287,9 +1315,10 @@ internal static partial class Program
             view.GroupDescriptions.Add(new PropertyGroupDescription("GroupDir"));
             list.ItemsSource = view;
             list.UnselectAll();
-            // 分组默认全部展开：模板里的 IsExpanded='True' 会被 ToggleButton 的双向绑定
-            // 在个别分组上覆盖成 False，这里在布局完成后统一纠正一次。
-            Dispatcher.BeginInvoke(new Action(delegate { ExpandAllGroups(); }),
+            // 布局完成后校正分组展开状态：
+            // 模板 IsExpanded 写死 True，但用户手动收起过的组要按记录复原。
+            // （原来这里无条件 ExpandAllGroups()，等于每次切 tab 都把收起的组重新张开。）
+            Dispatcher.BeginInvoke(new Action(delegate { RestoreCollapsedGroups(); }),
                 System.Windows.Threading.DispatcherPriority.Loaded);
             UpdateDetail();
 
@@ -1506,17 +1535,13 @@ internal static partial class Program
                     </ControlTemplate>
                   </ToggleButton.Template>
                 </ToggleButton>
-                <!-- 内容区包一层可裁剪的 Border：展开/收起用 Height 动画做抽屉效果。
-                     收起时高度 0（不用 Visibility），这样动画才能从中间值过渡。 -->
+                <!-- 内容区包一层可裁剪的 Border：展开/收起由代码用 MaxHeight 动画驱动。
+                     收起动画结束后会把 Visibility 设为 Collapsed —— 只把高度归零不够，
+                     虚拟化面板不会彻底释放这块空间，下方内容不会上移（会留白）。 -->
                 <Border x:Name='Body' ClipToBounds='True'>
                   <ContentPresenter x:Name='ExpandSite'/>
                 </Border>
               </StackPanel>
-              <ControlTemplate.Triggers>
-                <Trigger Property='IsExpanded' Value='False'>
-                  <Setter TargetName='Body' Property='Height' Value='0'/>
-                </Trigger>
-              </ControlTemplate.Triggers>
             </ControlTemplate>
           </Expander.Template>
           <ItemsPresenter/>
@@ -1539,7 +1564,61 @@ internal static partial class Program
             }
         }
 
-        /// <summary>目录抽屉展开：高度 0 → 实际高度，缓动展开</summary>
+        /// <summary>
+        /// 用户点击组头 → 记录/清除该组的收起状态。
+        /// 用 Click 而不是 Expanded/Collapsed 事件，是因为容器重建时模板初始化
+        /// IsExpanded='True' 也会触发 Expanded，那种「非用户操作」不能改动记录。
+        /// </summary>
+        private void OnGroupHeadClick(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                System.Windows.Controls.Primitives.ToggleButton tb =
+                    e.OriginalSource as System.Windows.Controls.Primitives.ToggleButton;
+                if (tb == null) { return; }
+                System.Windows.Controls.Expander ex =
+                    tb.TemplatedParent as System.Windows.Controls.Expander;
+                if (ex == null) { return; }
+
+                string key = GroupKey(ex);
+                if (key == null) { return; }
+
+                if (ex.IsExpanded) { collapsedGroups.Remove(key); }
+                else { collapsedGroups[key] = true; }
+            }
+            catch { }
+        }
+
+        /// <summary>分组唯一键（就是分组名，即上级目录全路径）</summary>
+        private static string GroupKey(System.Windows.Controls.Expander ex)
+        {
+            try
+            {
+                System.Windows.Data.CollectionViewGroup g =
+                    ex.DataContext as System.Windows.Data.CollectionViewGroup;
+                if (g != null) { return g.Name as string; }
+            }
+            catch { }
+            return null;
+        }
+
+        /// <summary>组内行的估算高度：行模板固定 44 高 + 上下 margin 2</summary>
+        private static double EstimateGroupHeight(System.Windows.Controls.Expander ex)
+        {
+            try
+            {
+                System.Windows.Data.CollectionViewGroup g =
+                    ex.DataContext as System.Windows.Data.CollectionViewGroup;
+                if (g != null) { return 46.0 * g.ItemCount + 10; }
+            }
+            catch { }
+            return 240;
+        }
+
+        /// <summary>
+        /// 目录抽屉展开：MaxHeight 0 → 内容高度。
+        /// 动画结束后把 MaxHeight 放回无穷大，窗口缩放时高度才能自适应。
+        /// </summary>
         private void OnGroupExpanded(object sender, RoutedEventArgs e)
         {
             try
@@ -1547,36 +1626,46 @@ internal static partial class Program
                 System.Windows.Controls.Expander ex =
                     e.OriginalSource as System.Windows.Controls.Expander;
                 if (ex == null) { return; }
+
+                // 这里只做动画。记录/清除「收起状态」交给 OnGroupHeadClick ——
+                // 容器重建时模板里的 IsExpanded='True' 也会触发本事件，
+                // 若在这里删除记录，用户收起的组一切 tab 就被误判成「用户展开」而丢失。
+
                 Border body = ex.Template.FindName("Body", ex) as Border;
                 if (body == null) { return; }
 
-                // 触发器已把 Height 置回 Auto，此时 ActualHeight 是展开后的真实高度
-                double h = body.ActualHeight;
-                if (h <= 0)
+                if (suppressGroupAnim)
                 {
-                    // 布局还没跑，用条目数估算（44px 一行 + 余量）
-                    h = 44.0 * Math.Max(1, CountVisuals(ex, typeof(System.Windows.Controls.ListViewItem))) + 8;
+                    body.Visibility = Visibility.Visible;
+                    body.MaxHeight = double.PositiveInfinity;
+                    return;
                 }
-                body.Tag = h;
 
+                body.Visibility = Visibility.Visible;
+                body.MaxHeight = 0;
+
+                double h = EstimateGroupHeight(ex);
                 DoubleAnimation a = new DoubleAnimation(0, h,
-                    System.TimeSpan.FromMilliseconds(220));
+                    System.TimeSpan.FromMilliseconds(230));
                 a.EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut };
                 a.Completed += delegate
                 {
                     try
                     {
-                        body.BeginAnimation(FrameworkElement.HeightProperty, null);
-                        body.Height = double.NaN;   // 回到 Auto，窗口缩放也不会被夹住
+                        body.BeginAnimation(FrameworkElement.MaxHeightProperty, null);
+                        body.MaxHeight = double.PositiveInfinity;
                     }
                     catch { }
                 };
-                body.BeginAnimation(FrameworkElement.HeightProperty, a);
+                body.BeginAnimation(FrameworkElement.MaxHeightProperty, a);
             }
             catch { }
         }
 
-        /// <summary>目录抽屉收起：实际高度 → 0</summary>
+        /// <summary>
+        /// 目录抽屉收起：MaxHeight 实际高度 → 0，结束后彻底 Collapsed。
+        /// 只做高度动画不 Collapsed 会留白 —— 虚拟化面板不会把这块空间还回去。
+        /// </summary>
         private void OnGroupCollapsed(object sender, RoutedEventArgs e)
         {
             try
@@ -1584,20 +1673,120 @@ internal static partial class Program
                 System.Windows.Controls.Expander ex =
                     e.OriginalSource as System.Windows.Controls.Expander;
                 if (ex == null) { return; }
+
+                // 同样只做动画，记录由 OnGroupHeadClick 负责
+
                 Border body = ex.Template.FindName("Body", ex) as Border;
                 if (body == null) { return; }
 
-                double h = body.ActualHeight;
-                if (h <= 0 && body.Tag is double && (double)body.Tag > 0)
+                if (suppressGroupAnim)
                 {
-                    h = (double)body.Tag;       // 触发器可能已把高度压成 0，用上次记录的值
+                    body.Visibility = Visibility.Collapsed;
+                    body.MaxHeight = double.PositiveInfinity;
+                    return;
                 }
-                if (h <= 0) { return; }
+
+                double h = body.ActualHeight;
+                if (h <= 1) { h = EstimateGroupHeight(ex); }
 
                 DoubleAnimation a = new DoubleAnimation(h, 0,
                     System.TimeSpan.FromMilliseconds(170));
                 a.EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut };
-                body.BeginAnimation(FrameworkElement.HeightProperty, a);
+                a.Completed += delegate
+                {
+                    try
+                    {
+                        body.BeginAnimation(FrameworkElement.MaxHeightProperty, null);
+                        body.MaxHeight = double.PositiveInfinity;
+                        // 关键：动画收完再彻底移除布局占位，下方内容才会真正上移
+                        body.Visibility = Visibility.Collapsed;
+                    }
+                    catch { }
+                };
+                body.BeginAnimation(FrameworkElement.MaxHeightProperty, a);
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// 列表重建后恢复「用户之前收起的组」。
+        /// 模板里 IsExpanded 写死 True，ItemsSource 一换（切 tab / 刷新 / 改筛选）容器就重建，
+        /// 所有组都会重新张开 —— 所以要在容器生成后主动遍历，把记录过的组重新收起。
+        /// 用 DispatcherPriority.Loaded 保证分组容器已经生成。
+        /// </summary>
+        // 诊断用：最近一次恢复的情况
+        private string lastRestoreInfo;
+        private int restoreCalls;
+
+        private void RestoreCollapsedGroups()
+        {
+            restoreCalls++;
+            if (list == null || collapsedGroups.Count == 0)
+            {
+                lastRestoreInfo = "第" + restoreCalls + "次调用：记录为空，跳过";
+                return;
+            }
+            suppressGroupAnim = true;
+            try
+            {
+                List<System.Windows.Controls.Expander> all =
+                    new List<System.Windows.Controls.Expander>();
+                CollectExpanders(list, all, 64);
+                lastRestoreInfo = "第" + restoreCalls + "次调用：遍历到 " + all.Count +
+                                  " 个分组，记录 " + collapsedGroups.Count + " 组";
+                for (int i = 0; i < all.Count; i++)
+                {
+                    System.Windows.Controls.Expander ex = all[i];
+                    string key = GroupKey(ex);
+                    if (key == null || !collapsedGroups.ContainsKey(key)) { continue; }
+                    if (!ex.IsExpanded) { continue; }
+                    lastRestoreInfo += "；收起了 " + key;
+                    ex.IsExpanded = false;
+                    Border body = ex.Template != null
+                        ? ex.Template.FindName("Body", ex) as Border : null;
+                    if (body != null)
+                    {
+                        body.Visibility = Visibility.Collapsed;
+                        body.MaxHeight = double.PositiveInfinity;
+                    }
+                }
+            }
+            catch { }
+            finally { suppressGroupAnim = false; }
+        }
+
+        /// <summary>切到清单页后恢复收起状态（布局后一次 + 220ms 后补一次，防容器生成延迟）</summary>
+        private void RestoreCollapsedGroupsSoon()
+        {
+            if (collapsedGroups.Count == 0) { return; }
+            Dispatcher.BeginInvoke(new Action(delegate { RestoreCollapsedGroups(); }),
+                System.Windows.Threading.DispatcherPriority.Loaded);
+
+            DispatcherTimer once = new DispatcherTimer();
+            once.Interval = System.TimeSpan.FromMilliseconds(220);
+            once.Tick += delegate
+            {
+                try { once.Stop(); RestoreCollapsedGroups(); }
+                catch { }
+            };
+            once.Start();
+        }
+
+        private static void CollectExpanders(DependencyObject root,
+            List<System.Windows.Controls.Expander> into, int max)
+        {
+            if (root == null || into.Count >= max) { return; }
+            try
+            {
+                int n = VisualTreeHelper.GetChildrenCount(root);
+                for (int i = 0; i < n && into.Count < max; i++)
+                {
+                    DependencyObject child = VisualTreeHelper.GetChild(root, i);
+                    System.Windows.Controls.Expander ex =
+                        child as System.Windows.Controls.Expander;
+                    if (ex != null) { into.Add(ex); }
+                    CollectExpanders(child, into, max);
+                }
             }
             catch { }
         }
@@ -1606,7 +1795,14 @@ internal static partial class Program
         private void ExpandAllGroups()
         {
             if (list == null) { return; }
-            ExpandExpanders(list);
+            // 批量展开不播动画（多个抽屉同时动会卡），并清空收起记忆
+            suppressGroupAnim = true;
+            try
+            {
+                ExpandExpanders(list);
+                collapsedGroups.Clear();
+            }
+            finally { suppressGroupAnim = false; }
         }
 
         private static void ExpandExpanders(DependencyObject node)
