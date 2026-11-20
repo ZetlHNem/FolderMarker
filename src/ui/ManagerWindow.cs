@@ -350,15 +350,22 @@ internal static partial class Program
             t.Start();
         }
 
-        /// <summary>后台下载 + 静默安装，弹窗反馈</summary>
+        /// <summary>后台下载 + 静默安装，带实时进度窗口</summary>
         private void DoUpdate(UpdateInfo info)
         {
-            WinUiDialog.Info(this, "开始更新", "正在从 GitHub 下载安装包，随后会自动完成安装并重启程序。期间管理台可能关闭，属正常现象。");
+            UpdateProgressWindow prog = null;
+            try { prog = new UpdateProgressWindow(this, info.Version); prog.Show(); }
+            catch { prog = null; }
+
             System.Threading.Thread t = new System.Threading.Thread(delegate()
             {
-                string err = DownloadAndInstall(info);
+                string err = DownloadAndInstall(info, delegate(int pct, string status)
+                {
+                    if (prog != null) { prog.SetProgress(pct, status); }
+                });
                 Dispatcher.BeginInvoke(new Action(delegate
                 {
+                    if (prog != null) { try { prog.Close(); } catch { } }
                     if (err != null)
                     {
                         WinUiDialog.Info(this, "更新失败", err + "\r\n\r\n你可以到 GitHub Releases 手动下载安装包。");
