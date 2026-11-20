@@ -321,11 +321,20 @@ internal static class WinUi
     <Setter Property='Template'>
       <Setter.Value>
         <ControlTemplate TargetType='Button'>
-          <Grid x:Name='Root' Background='Transparent'>
+          <Grid x:Name='Root' Background='Transparent' RenderTransformOrigin='0.5,0.5'>
+            <Grid.RenderTransform>
+              <ScaleTransform x:Name='Sc' ScaleX='1' ScaleY='1'/>
+            </Grid.RenderTransform>
             <Border x:Name='Bg' Background='{TemplateBinding Background}'
                     BorderBrush='{TemplateBinding BorderBrush}'
                     BorderThickness='{TemplateBinding BorderThickness}'
                     CornerRadius='4'/>
+            <!-- hover / press 用叠加层做透明度过渡：比直接换背景色平滑，
+                 也不用动画 Brush（Brush 动画开销大且可能碰到冻结实例） -->
+            <Border x:Name='Hv' Background='{StaticResource ControlFillHover}'
+                    CornerRadius='4' Opacity='0' IsHitTestVisible='False'/>
+            <Border x:Name='Pr' Background='{StaticResource ControlFillPressed}'
+                    CornerRadius='4' Opacity='0' IsHitTestVisible='False'/>
             <Border x:Name='Edge' CornerRadius='4' Margin='1'
                     BorderThickness='0,0,0,1' BorderBrush='{StaticResource ControlStrokeBottom}'/>
             <ContentPresenter x:Name='Cp' Margin='{TemplateBinding Padding}'
@@ -335,10 +344,48 @@ internal static class WinUi
           </Grid>
           <ControlTemplate.Triggers>
             <Trigger Property='IsMouseOver' Value='True'>
-              <Setter TargetName='Bg' Property='Background' Value='{StaticResource ControlFillHover}'/>
+              <Trigger.EnterActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName='Hv' Storyboard.TargetProperty='Opacity'
+                                     To='1' Duration='0:0:0.12'/>
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.EnterActions>
+              <Trigger.ExitActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName='Hv' Storyboard.TargetProperty='Opacity'
+                                     To='0' Duration='0:0:0.18'/>
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.ExitActions>
             </Trigger>
             <Trigger Property='IsPressed' Value='True'>
-              <Setter TargetName='Bg' Property='Background' Value='{StaticResource ControlFillPressed}'/>
+              <Trigger.EnterActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName='Pr' Storyboard.TargetProperty='Opacity'
+                                     To='1' Duration='0:0:0.06'/>
+                    <DoubleAnimation Storyboard.TargetName='Sc' Storyboard.TargetProperty='ScaleX'
+                                     To='0.97' Duration='0:0:0.06'/>
+                    <DoubleAnimation Storyboard.TargetName='Sc' Storyboard.TargetProperty='ScaleY'
+                                     To='0.97' Duration='0:0:0.06'/>
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.EnterActions>
+              <Trigger.ExitActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName='Pr' Storyboard.TargetProperty='Opacity'
+                                     To='0' Duration='0:0:0.14'/>
+                    <DoubleAnimation Storyboard.TargetName='Sc' Storyboard.TargetProperty='ScaleX'
+                                     To='1' Duration='0:0:0.14'/>
+                    <DoubleAnimation Storyboard.TargetName='Sc' Storyboard.TargetProperty='ScaleY'
+                                     To='1' Duration='0:0:0.14'/>
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.ExitActions>
               <Setter Property='Foreground' Value='{StaticResource TextSecondary}'/>
             </Trigger>
             <Trigger Property='IsEnabled' Value='False'>
@@ -360,8 +407,15 @@ internal static class WinUi
     <Setter Property='Template'>
       <Setter.Value>
         <ControlTemplate TargetType='Button'>
-          <Grid x:Name='Root' Background='Transparent'>
+          <Grid x:Name='Root' Background='Transparent' RenderTransformOrigin='0.5,0.5'>
+            <Grid.RenderTransform>
+              <ScaleTransform x:Name='Sc' ScaleX='1' ScaleY='1'/>
+            </Grid.RenderTransform>
             <Border x:Name='Bg' Background='{TemplateBinding Background}' CornerRadius='4'/>
+            <Border x:Name='Hv' Background='{StaticResource AccentFillHover}'
+                    CornerRadius='4' Opacity='0' IsHitTestVisible='False'/>
+            <Border x:Name='Pr' Background='{StaticResource AccentFillPressed}'
+                    CornerRadius='4' Opacity='0' IsHitTestVisible='False'/>
             <Border x:Name='Edge' CornerRadius='4' Margin='1'
                     BorderThickness='0,0,0,1' BorderBrush='#26000000'/>
             <ContentPresenter x:Name='Cp' Margin='{TemplateBinding Padding}'
@@ -370,10 +424,48 @@ internal static class WinUi
           </Grid>
           <ControlTemplate.Triggers>
             <Trigger Property='IsMouseOver' Value='True'>
-              <Setter TargetName='Bg' Property='Background' Value='{StaticResource AccentFillHover}'/>
+              <Trigger.EnterActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName='Hv' Storyboard.TargetProperty='Opacity'
+                                     To='1' Duration='0:0:0.12'/>
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.EnterActions>
+              <Trigger.ExitActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName='Hv' Storyboard.TargetProperty='Opacity'
+                                     To='0' Duration='0:0:0.18'/>
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.ExitActions>
             </Trigger>
             <Trigger Property='IsPressed' Value='True'>
-              <Setter TargetName='Bg' Property='Background' Value='{StaticResource AccentFillPressed}'/>
+              <Trigger.EnterActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName='Pr' Storyboard.TargetProperty='Opacity'
+                                     To='1' Duration='0:0:0.06'/>
+                    <DoubleAnimation Storyboard.TargetName='Sc' Storyboard.TargetProperty='ScaleX'
+                                     To='0.97' Duration='0:0:0.06'/>
+                    <DoubleAnimation Storyboard.TargetName='Sc' Storyboard.TargetProperty='ScaleY'
+                                     To='0.97' Duration='0:0:0.06'/>
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.EnterActions>
+              <Trigger.ExitActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName='Pr' Storyboard.TargetProperty='Opacity'
+                                     To='0' Duration='0:0:0.14'/>
+                    <DoubleAnimation Storyboard.TargetName='Sc' Storyboard.TargetProperty='ScaleX'
+                                     To='1' Duration='0:0:0.14'/>
+                    <DoubleAnimation Storyboard.TargetName='Sc' Storyboard.TargetProperty='ScaleY'
+                                     To='1' Duration='0:0:0.14'/>
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.ExitActions>
             </Trigger>
             <Trigger Property='IsEnabled' Value='False'>
               <Setter TargetName='Bg' Property='Background' Value='#4D000000'/>
@@ -403,16 +495,50 @@ internal static class WinUi
         <ControlTemplate TargetType='Button'>
           <Grid x:Name='Root' Background='Transparent'>
             <Border x:Name='Bg' Background='Transparent' CornerRadius='4'/>
+            <Border x:Name='Hv' Background='{StaticResource SubtleHover}'
+                    CornerRadius='4' Opacity='0' IsHitTestVisible='False'/>
+            <Border x:Name='Pr' Background='{StaticResource SubtlePressed}'
+                    CornerRadius='4' Opacity='0' IsHitTestVisible='False'/>
             <ContentPresenter Margin='{TemplateBinding Padding}'
                     HorizontalAlignment='Center' VerticalAlignment='Center'
                     RecognizesAccessKey='True'/>
           </Grid>
           <ControlTemplate.Triggers>
             <Trigger Property='IsMouseOver' Value='True'>
-              <Setter TargetName='Bg' Property='Background' Value='{StaticResource SubtleHover}'/>
+              <Trigger.EnterActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName='Hv' Storyboard.TargetProperty='Opacity'
+                                     To='1' Duration='0:0:0.12'/>
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.EnterActions>
+              <Trigger.ExitActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName='Hv' Storyboard.TargetProperty='Opacity'
+                                     To='0' Duration='0:0:0.18'/>
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.ExitActions>
             </Trigger>
             <Trigger Property='IsPressed' Value='True'>
-              <Setter TargetName='Bg' Property='Background' Value='{StaticResource SubtlePressed}'/>
+              <Trigger.EnterActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName='Pr' Storyboard.TargetProperty='Opacity'
+                                     To='1' Duration='0:0:0.06'/>
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.EnterActions>
+              <Trigger.ExitActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName='Pr' Storyboard.TargetProperty='Opacity'
+                                     To='0' Duration='0:0:0.14'/>
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.ExitActions>
             </Trigger>
             <Trigger Property='IsEnabled' Value='False'>
               <Setter Property='Foreground' Value='{StaticResource TextDisabled}'/>
@@ -547,7 +673,7 @@ internal static class WinUi
             <Popup x:Name='PART_Popup' AllowsTransparency='True' Focusable='False'
                    IsOpen='{TemplateBinding IsDropDownOpen}'
                    Placement='Bottom' VerticalOffset='4'
-                   PopupAnimation='None'>
+                   PopupAnimation='Fade'>
               <Border Background='{StaticResource FlyoutFill}'
                       BorderBrush='{StaticResource FlyoutStroke}' BorderThickness='1'
                       CornerRadius='8' Margin='0,0,8,8'
@@ -581,6 +707,10 @@ internal static class WinUi
         <ControlTemplate TargetType='ListViewItem'>
           <Grid x:Name='Root' Background='Transparent'>
             <Border x:Name='Bg' Background='Transparent' CornerRadius='4'/>
+            <Border x:Name='Hv' Background='{StaticResource RowHover}'
+                    CornerRadius='4' Opacity='0' IsHitTestVisible='False'/>
+            <Border x:Name='Sel' Background='{StaticResource RowSelected}'
+                    CornerRadius='4' Opacity='0' IsHitTestVisible='False'/>
             <Border x:Name='Pill' Width='3' Height='16' CornerRadius='1.5'
                     Background='{StaticResource AccentFill}'
                     HorizontalAlignment='Left' VerticalAlignment='Center' Opacity='0'/>
@@ -588,11 +718,46 @@ internal static class WinUi
           </Grid>
           <ControlTemplate.Triggers>
             <Trigger Property='IsMouseOver' Value='True'>
-              <Setter TargetName='Bg' Property='Background' Value='{StaticResource RowHover}'/>
+              <Trigger.EnterActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName='Hv' Storyboard.TargetProperty='Opacity'
+                                     To='1' Duration='0:0:0.11'/>
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.EnterActions>
+              <Trigger.ExitActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName='Hv' Storyboard.TargetProperty='Opacity'
+                                     To='0' Duration='0:0:0.16'/>
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.ExitActions>
             </Trigger>
             <Trigger Property='IsSelected' Value='True'>
-              <Setter TargetName='Bg' Property='Background' Value='{StaticResource RowSelected}'/>
+              <Setter TargetName='Sel' Property='Opacity' Value='1'/>
               <Setter TargetName='Pill' Property='Opacity' Value='1'/>
+              <Trigger.EnterActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName='Sel' Storyboard.TargetProperty='Opacity'
+                                     To='1' Duration='0:0:0.14'/>
+                    <DoubleAnimation Storyboard.TargetName='Pill' Storyboard.TargetProperty='Opacity'
+                                     To='1' Duration='0:0:0.14'/>
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.EnterActions>
+              <Trigger.ExitActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName='Sel' Storyboard.TargetProperty='Opacity'
+                                     To='0' Duration='0:0:0.14'/>
+                    <DoubleAnimation Storyboard.TargetName='Pill' Storyboard.TargetProperty='Opacity'
+                                     To='0' Duration='0:0:0.14'/>
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.ExitActions>
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
@@ -605,11 +770,14 @@ internal static class WinUi
     <Setter Property='BorderThickness' Value='0'/>
     <Setter Property='Padding' Value='0'/>
     <Setter Property='ItemContainerStyle' Value='{StaticResource WinListViewItem}'/>
-    <Setter Property='ScrollViewer.CanContentScroll' Value='False'/>
+    <!-- CanContentScroll 必须为 True：它同时是「UI 虚拟化」的开关。
+         设 False 走像素滚动，VirtualizingStackPanel 会退化成普通 StackPanel，
+         清单几百项时全部实例化 —— 这是之前管理台卡顿的主因。 -->
+    <Setter Property='ScrollViewer.CanContentScroll' Value='True'/>
     <Setter Property='Template'>
       <Setter.Value>
         <ControlTemplate TargetType='ListView'>
-          <ScrollViewer Focusable='False' CanContentScroll='False'
+          <ScrollViewer Focusable='False' CanContentScroll='True'
                         HorizontalScrollBarVisibility='Disabled'
                         VerticalScrollBarVisibility='Auto'
                         Template='{StaticResource WinScrollViewerTemplate}'>
@@ -697,10 +865,41 @@ internal static class WinUi
           </Grid>
           <ControlTemplate.Triggers>
             <Trigger Property='IsChecked' Value='True'>
+              <!-- 用 Margin 动画（ThicknessAnimation）而不是 RenderTransform：
+                   Setter 的 TargetName 只能指向 FrameworkElement，指 Freezable（如
+                   TranslateTransform）会让整个模板解析失败，所有样式静默丢失。
+                   Setter 兜底「初始就是开」的情况，动画负责状态切换的过渡。 -->
+              <Setter TargetName='Knob' Property='Margin' Value='24,0,0,0'/>
               <Setter TargetName='Fill' Property='Opacity' Value='1'/>
-              <Setter TargetName='Knob' Property='HorizontalAlignment' Value='Right'/>
-              <Setter TargetName='Knob' Property='Margin' Value='0,0,4,0'/>
               <Setter TargetName='Knob' Property='Background' Value='#FFFFFFFF'/>
+              <Trigger.EnterActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <ThicknessAnimation Storyboard.TargetName='Knob' Storyboard.TargetProperty='Margin'
+                                        To='24,0,0,0' Duration='0:0:0.16'>
+                      <ThicknessAnimation.EasingFunction>
+                        <CubicEase EasingMode='EaseOut'/>
+                      </ThicknessAnimation.EasingFunction>
+                    </ThicknessAnimation>
+                    <DoubleAnimation Storyboard.TargetName='Fill' Storyboard.TargetProperty='Opacity'
+                                     To='1' Duration='0:0:0.14'/>
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.EnterActions>
+              <Trigger.ExitActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <ThicknessAnimation Storyboard.TargetName='Knob' Storyboard.TargetProperty='Margin'
+                                        To='4,0,0,0' Duration='0:0:0.16'>
+                      <ThicknessAnimation.EasingFunction>
+                        <CubicEase EasingMode='EaseOut'/>
+                      </ThicknessAnimation.EasingFunction>
+                    </ThicknessAnimation>
+                    <DoubleAnimation Storyboard.TargetName='Fill' Storyboard.TargetProperty='Opacity'
+                                     To='0' Duration='0:0:0.14'/>
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.ExitActions>
             </Trigger>
             <Trigger Property='IsMouseOver' Value='True'>
               <Setter TargetName='Rail' Property='BorderBrush' Value='{StaticResource TextTertiary}'/>
@@ -1188,6 +1387,106 @@ internal static class WinMotion
             };
         }
         catch { }
+    }
+}
+
+/// <summary>
+/// 平滑滚动：把滚轮的「瞬时跳 3 行」换成 160ms 缓动滑动。
+/// 窗口级 PreviewMouseWheel 统一处理 —— 从事件源向上找第一个能滚的 ScrollViewer，
+/// 这样列表、日志、设置页、对话框全都自动生效，不用逐个挂。
+/// 注意 CanContentScroll=true（虚拟化列表）时 VerticalOffset 的单位是「项」，
+/// 步长要按项算，否则会跳得离谱。
+/// </summary>
+internal static class SmoothScroll
+{
+    private static readonly DependencyProperty TargetProperty =
+        DependencyProperty.RegisterAttached("Target", typeof(double), typeof(SmoothScroll),
+            new PropertyMetadata(0.0, OnTargetChanged));
+
+    private static void OnTargetChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        ScrollViewer sv = d as ScrollViewer;
+        if (sv == null) { return; }
+        try { sv.ScrollToVerticalOffset((double)e.NewValue); }
+        catch { }
+    }
+
+    /// <summary>挂到窗口/根元素上一次即可，内部所有滚动区域都生效</summary>
+    public static void Enable(UIElement root)
+    {
+        if (root == null) { return; }
+        try
+        {
+            root.PreviewMouseWheel += delegate(object sender, System.Windows.Input.MouseWheelEventArgs e)
+            {
+                try
+                {
+                    if (e.Handled) { return; }
+                    if (System.Windows.Input.Keyboard.Modifiers != System.Windows.Input.ModifierKeys.None)
+                    { return; }
+
+                    ScrollViewer sv = FindScrollViewer(e.OriginalSource as DependencyObject);
+                    if (sv == null) { return; }
+                    if (sv.ScrollableHeight <= 0) { return; }
+
+                    // 内容不足一屏、或已经滚到边界且继续往外滚 → 交给默认行为
+                    bool canUp = sv.VerticalOffset > 0.5;
+                    bool canDown = sv.VerticalOffset < sv.ScrollableHeight - 0.5;
+                    if (e.Delta > 0 && !canUp) { return; }
+                    if (e.Delta < 0 && !canDown) { return; }
+
+                    double step;
+                    if (sv.CanContentScroll)
+                    {
+                        step = 3;   // 单位是「项」：和系统默认的 3 行一致
+                    }
+                    else
+                    {
+                        step = System.Windows.SystemParameters.WheelScrollLines > 0
+                            ? System.Windows.SystemParameters.WheelScrollLines * 32.0
+                            : 96.0;
+                    }
+
+                    // 连续滚动时从「上一次动画的目标」继续，避免动画被打断后跳回
+                    double from = (double)sv.GetValue(TargetProperty);
+                    if (double.IsNaN(from) || Math.Abs(from - sv.VerticalOffset) > step * 4)
+                    {
+                        from = sv.VerticalOffset;
+                    }
+
+                    double target = from + (e.Delta > 0 ? -step : step);
+                    if (target < 0) { target = 0; }
+                    if (target > sv.ScrollableHeight) { target = sv.ScrollableHeight; }
+
+                    e.Handled = true;
+
+                    System.Windows.Media.Animation.DoubleAnimation a =
+                        new System.Windows.Media.Animation.DoubleAnimation(target,
+                            System.TimeSpan.FromMilliseconds(160));
+                    System.Windows.Media.Animation.CubicEase ease =
+                        new System.Windows.Media.Animation.CubicEase();
+                    ease.EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut;
+                    a.EasingFunction = ease;
+                    a.FillBehavior = System.Windows.Media.Animation.FillBehavior.Stop;
+                    sv.SetValue(TargetProperty, target);
+                    sv.BeginAnimation(TargetProperty, a);
+                }
+                catch { }
+            };
+        }
+        catch { }
+    }
+
+    private static ScrollViewer FindScrollViewer(DependencyObject node)
+    {
+        int guard = 0;
+        while (node != null && guard++ < 64)
+        {
+            ScrollViewer sv = node as ScrollViewer;
+            if (sv != null) { return sv; }
+            node = System.Windows.Media.VisualTreeHelper.GetParent(node);
+        }
+        return null;
     }
 }
 
