@@ -160,20 +160,19 @@ internal static partial class Program
         return m.Groups[1].Value.Replace("\\/", "/").Replace("\\\"", "\"");
     }
 
-    /// <summary>从 releases/latest 的 assets 数组里找第一个 .exe 的 browser_download_url</summary>
+    /// <summary>从 releases/latest 的 assets 数组里找 .exe 安装包的 browser_download_url</summary>
     private static string ExtractExeAssetUrl(string json)
     {
         if (string.IsNullOrEmpty(json)) { return null; }
-        // 每个 asset 是一个 {...} 对象；在含 .exe 名字的片段里取 download url
-        foreach (Match asset in Regex.Matches(json, "\\{[^{}]*\\}"))
+        // 不能用 \{[^{}]*\} 匹配 asset 对象 —— GitHub 真实返回里每个 asset 内嵌了
+        // uploader:{...}，含嵌套大括号，那个正则一个都匹配不到（曾导致「检查失败：
+        // 返回内容里没找到版本号或安装包」）。改为直接抓所有 browser_download_url，
+        // 挑第一个 .exe 结尾的；zip/tar.gz 等源码包的 url 不会以 .exe 结尾，自然被跳过。
+        string pat = "\"browser_download_url\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"";
+        foreach (Match m in Regex.Matches(json, pat))
         {
-            string seg = asset.Value;
-            string name = ExtractJsonString(seg, "name");
-            if (name != null && name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
-            {
-                string url = ExtractJsonString(seg, "browser_download_url");
-                if (!string.IsNullOrEmpty(url)) { return url; }
-            }
+            string url = m.Groups[1].Value.Replace("\\/", "/").Replace("\\\"", "\"");
+            if (url.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) { return url; }
         }
         return null;
     }
