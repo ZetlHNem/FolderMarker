@@ -101,6 +101,7 @@ internal static partial class Program
         // 设置页
         private CheckBox tgAutoStart;
         private CheckBox tgAutoFollow;
+        private CheckBox tgAutoUpdate;
         private ComboBox cbWatch;
         private ComboBox cbScan;
         private ComboBox cbTheme;
@@ -284,6 +285,86 @@ internal static partial class Program
                 if (pages[1].Visibility == Visibility.Visible) { UpdateWatchStatus(); }
             };
             timer.Start();
+
+            // 启动自动检查更新：开相关设置且在 UI 空闲时才跑，失败静默
+            if (Program.GetSettingInt("AutoUpdate", 1) != 0)
+            {
+                Dispatcher.BeginInvoke(new Action(delegate { AutoCheckUpdate(); }),
+                    System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            }
+        }
+
+        /// <summary>后台检查新版本，发现新版弹窗询问是否更新（手动/自动都走这里）</summary>
+        private void AutoCheckUpdate()
+        {
+            BackgroundWorkerCheck(delegate(UpdateInfo info, string err)
+            {
+                if (err != null) { return; }   // 自动检查失败不打扰用户
+                if (!IsNewerVersion(info.Version, AppVersion)) { return; }
+                string msg = "发现新版本 " + info.Version + "\r\n当前版本 " + AppVersion +
+                    "\r\n\r\n是否现在下载并更新？更新包从 GitHub 下载，约 3 MB。";
+                if (WinUiDialog.Confirm(this, "有可用更新", msg, "更新"))
+                {
+                    DoUpdate(info);
+                }
+            }, false);
+        }
+
+        /// <summary>手动检查：无论有没有新版都给结果反馈</summary>
+        private void ManualCheckUpdate()
+        {
+            BackgroundWorkerCheck(delegate(UpdateInfo info, string err)
+            {
+                if (err != null)
+                {
+                    WinUiDialog.Info(this, "检查失败", err + "\r\n\r\n请检查网络后重试。");
+                    return;
+                }
+                if (!IsNewerVersion(info.Version, AppVersion))
+                {
+                    WinUiDialog.Info(this, "已是最新", "当前版本 " + AppVersion + " 已是最新版本。");
+                    return;
+                }
+                string msg = "发现新版本 " + info.Version + "\r\n当前版本 " + AppVersion +
+                    "\r\n\r\n是否现在下载并更新？更新包从 GitHub 下载，约 3 MB。";
+                if (WinUiDialog.Confirm(this, "有可用更新", msg, "更新"))
+                {
+                    DoUpdate(info);
+                }
+            }, true);
+        }
+
+        /// <summary>后台线程跑网络检查，完成后回到 UI 线程回调</summary>
+        private void BackgroundWorkerCheck(Action<UpdateInfo, string> done, bool manual)
+        {
+            System.Threading.Thread t = new System.Threading.Thread(delegate()
+            {
+                UpdateInfo info = CheckLatestVersion();
+                string err = info.Ok ? null : info.Error;
+                Dispatcher.BeginInvoke(new Action(delegate { done(info, err); }));
+            });
+            t.IsBackground = true;
+            t.Start();
+        }
+
+        /// <summary>后台下载 + 静默安装，弹窗反馈</summary>
+        private void DoUpdate(UpdateInfo info)
+        {
+            WinUiDialog.Info(this, "开始更新", "正在从 GitHub 下载安装包，随后会自动完成安装并重启程序。期间管理台可能关闭，属正常现象。");
+            System.Threading.Thread t = new System.Threading.Thread(delegate()
+            {
+                string err = DownloadAndInstall(info);
+                Dispatcher.BeginInvoke(new Action(delegate
+                {
+                    if (err != null)
+                    {
+                        WinUiDialog.Info(this, "更新失败", err + "\r\n\r\n你可以到 GitHub Releases 手动下载安装包。");
+                    }
+                    // 成功时安装器会接管（静默安装会替换 exe 并重启托盘）
+                }));
+            });
+            t.IsBackground = true;
+            t.Start();
         }
 
         private void UpdateMaxGlyph()
@@ -1642,6 +1723,12 @@ internal static partial class Program
                 catch { }
             };
             btns.Children.Add(bErr);
+
+            Button bUpdate = MakeButton("WinAccentButton", "检查更新");
+            bUpdate.MinWidth = 104;
+            bUpdate.Margin = new Thickness(8, 0, 0, 0);
+            bUpdate.Click += delegate { ManualCheckUpdate(); };
+            btns.Children.Add(bUpdate);
 
             card.Children.Add(btns);
             page.Children.Add(WinUi.Card(card, new Thickness(0)));
