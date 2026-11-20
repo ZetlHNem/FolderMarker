@@ -231,6 +231,8 @@ internal static partial class Program
 
         System.Windows.Threading.DispatcherTimer t = new System.Windows.Threading.DispatcherTimer();
         t.Interval = System.TimeSpan.FromMilliseconds(1500);
+        bool deferShutdown = false;   // 交给第二段定时器收尾时置 true
+        System.Windows.Threading.DispatcherTimer t2 = null;
         t.Tick += delegate
         {
             t.Stop();
@@ -253,6 +255,51 @@ internal static partial class Program
                 DiagLine("uiprobe 已保存: " + outPath + "  " + pw + "x" + ph);
                 // 虚拟化验证：已实例化的行容器数应远小于总条目数，否则滚动会卡
                 DiagLine("uiprobe 列表: " + w.ProbeListStats());
+
+                // 分组收起验证：收起后内容高度必须归零，否则「收起」等于没效果
+                int exCount = CountVisuals(w, typeof(System.Windows.Controls.Expander));
+                DiagLine("uiprobe 分组数: " + exCount);
+                System.Windows.Controls.Expander ex = FindFirstExpander(w);
+                if (ex != null)
+                {
+                    System.Windows.Controls.Border body = null;
+                    try
+                    {
+                        if (ex.Template != null)
+                        {
+                            body = ex.Template.FindName("Body", ex)
+                                as System.Windows.Controls.Border;
+                        }
+                    }
+                    catch (Exception tex) { DiagLine("uiprobe FindName 异常: " + tex.Message); }
+
+                    double before = body != null ? body.ActualHeight : -1;
+                    DiagLine("uiprobe 收起前: Body=" + (body == null ? "未找到" : "找到") +
+                             "，高度 " + Math.Round(before) + "px");
+                    ex.IsExpanded = false;
+
+                    t2 = new System.Windows.Threading.DispatcherTimer();
+                    t2.Interval = System.TimeSpan.FromMilliseconds(420);
+                    System.Windows.Controls.Expander exRef = ex;
+                    System.Windows.Controls.Border bodyRef = body;
+                    t2.Tick += delegate
+                    {
+                        t2.Stop();
+                        try
+                        {
+                            double after = bodyRef != null ? bodyRef.ActualHeight : -1;
+                            DiagLine("uiprobe 分组收起: 收起前 " + Math.Round(before) + "px，收起后 "
+                                + Math.Round(after) + "px" + (after >= 0 && after < 6 ? "  → 正常" : "  → 异常"));
+                            exRef.IsExpanded = true;
+                        }
+                        catch (Exception tex2) { DiagLine("uiprobe 收起检查异常: " + tex2.Message); }
+                        SetSetting("AutoUpdate", oldAuto == 0 ? "0" : "1");
+                        app.Shutdown();
+                    };
+                    t2.Start();
+                    deferShutdown = true;
+                    return;   // 交给第二段定时器收尾
+                }
             }
             catch (System.Exception ex)
             {
@@ -260,14 +307,40 @@ internal static partial class Program
             }
             finally
             {
-                SetSetting("AutoUpdate", oldAuto == 0 ? "0" : "1");
-                app.Shutdown();
+                // 关键：deferShutdown 时不能在这里 shutdown，否则第二段验证还没跑程序就退了
+                if (!deferShutdown)
+                {
+                    SetSetting("AutoUpdate", oldAuto == 0 ? "0" : "1");
+                    app.Shutdown();
+                }
             }
         };
         t.Start();
         app.Run();
         DiagEnd();
         return 0;
+    }
+
+    /// <summary>找视觉树里第一个 Expander（uiprobe 收起测试用）</summary>
+    private static System.Windows.Controls.Expander FindFirstExpander(
+        System.Windows.DependencyObject root)
+    {
+        if (root == null) { return null; }
+        try
+        {
+            int n = System.Windows.Media.VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < n; i++)
+            {
+                System.Windows.DependencyObject child =
+                    System.Windows.Media.VisualTreeHelper.GetChild(root, i);
+                System.Windows.Controls.Expander ex = child as System.Windows.Controls.Expander;
+                if (ex != null) { return ex; }
+                System.Windows.Controls.Expander deep = FindFirstExpander(child);
+                if (deep != null) { return deep; }
+            }
+        }
+        catch { }
+        return null;
     }
 
     /// <summary>统计视觉树里某种类型的元素数量（虚拟化/渲染诊断用）</summary>
