@@ -2,7 +2,7 @@
 ; 生成标准「下一步 → 下一步」安装向导，简体中文界面
 
 #define MyAppName "文件夹标记"
-#define MyAppVersion "2.4.4"
+#define MyAppVersion "2.4.5"
 #define MyAppPublisher "FolderMarker"
 #define ShellExtVer "15"
 
