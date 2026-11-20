@@ -14,7 +14,7 @@ internal static partial class Program
     // 用户也能直接拿记事本改。
 
     /// <summary>程序版本号（与 FolderMarker.iss 的 MyAppVersion 保持一致）</summary>
-    private const string AppVersion = "2.4.3";
+    private const string AppVersion = "2.4.4";
 
     private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string RunValueName = "FolderMarkerCache";
