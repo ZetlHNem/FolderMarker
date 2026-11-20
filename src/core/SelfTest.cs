@@ -282,7 +282,7 @@ internal static partial class Program
                     //  2) 收起后高度归零 + Visibility=Collapsed（不留白）
                     //  3) 切到别的 tab 再切回，分组应保持收起（不被重置成展开）
                     t2 = new System.Windows.Threading.DispatcherTimer();
-                    t2.Interval = System.TimeSpan.FromMilliseconds(450);
+                    t2.Interval = System.TimeSpan.FromMilliseconds(80);   // 先抓动画中间帧
                     System.Windows.Controls.Expander exRef = ex;
                     System.Windows.Controls.Border bodyRef = body;
                     int phase = 0;
@@ -294,6 +294,22 @@ internal static partial class Program
                         {
                             if (phase == 1)
                             {
+                                // 动画中间帧：布局高度应保持原值（Clip 不动布局），
+                                // 裁剪高度应已经变小 —— 两者都成立说明「不触发布局」的裁剪动画在工作
+                                double midH = bodyRef != null ? bodyRef.ActualHeight : -1;
+                                double clipH = -1;
+                                System.Windows.Media.RectangleGeometry rg =
+                                    bodyRef != null ? bodyRef.Clip as System.Windows.Media.RectangleGeometry : null;
+                                if (rg != null) { clipH = rg.Rect.Height; }
+                                DiagLine("uiprobe 收起 80ms: 布局高度 " + Math.Round(midH) +
+                                         "px，裁剪高度 " + Math.Round(clipH) + "px" +
+                                         (clipH > 0 && clipH < midH - 10
+                                            ? "  → 正常（裁剪动画生效，布局未变）" : "  → 异常"));
+                                t2.Interval = System.TimeSpan.FromMilliseconds(400);
+                                return;
+                            }
+                            if (phase == 2)
+                            {
                                 double after = bodyRef != null ? bodyRef.ActualHeight : -1;
                                 string vis = bodyRef != null ? bodyRef.Visibility.ToString() : "?";
                                 DiagLine("uiprobe 收起后: 高度 " + Math.Round(after) + "px，Visibility=" + vis +
@@ -304,13 +320,13 @@ internal static partial class Program
                                 w.ProbeSwitchTab(1);
                                 return;
                             }
-                            if (phase == 2)
+                            if (phase == 3)
                             {
                                 w.ProbeSwitchTab(0);
                                 return;
                             }
 
-                            // phase 3：切回后检查该分组是否仍收起
+                            // phase 4：切回后检查该分组是否仍收起
                             t2.Stop();
                             System.Windows.Controls.Expander again = FindFirstExpander(w);
                             bool stillCollapsed = again != null && !again.IsExpanded;
@@ -322,8 +338,8 @@ internal static partial class Program
                         catch (Exception tex2) { DiagLine("uiprobe 阶段检查异常: " + tex2.Message); }
                         finally
                         {
-                            // 只有跑完第三阶段（切回并检查）才收尾
-                            if (phase >= 3)
+                            // 只有跑完第四阶段（切回并检查）才收尾
+                            if (phase >= 4)
                             {
                                 SetSetting("AutoUpdate", oldAuto == 0 ? "0" : "1");
                                 app.Shutdown();
